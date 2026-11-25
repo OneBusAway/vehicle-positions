@@ -210,6 +210,7 @@ var requestSchemaStructs = map[string]string{
 	"UpdateUserRequest":       "UpdateUserRequest",
 	"LoginRequest":            "LoginRequest",
 	"RefreshRequest":          "RefreshRequest",
+	"ChangePasswordRequest":   "ChangePasswordRequest",
 }
 
 // operationMethods are the path-item fields that describe an operation. Every

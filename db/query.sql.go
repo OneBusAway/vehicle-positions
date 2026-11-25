@@ -73,6 +73,26 @@ func (q *Queries) AssignUserVehicle(ctx context.Context, arg AssignUserVehiclePa
 	return i, err
 }
 
+const changeOwnPassword = `-- name: ChangeOwnPassword :exec
+UPDATE users
+SET password_hash = $1,
+    sessions_valid_after = GREATEST(sessions_valid_after, $2)
+WHERE id = $3
+`
+
+type ChangeOwnPasswordParams struct {
+	PasswordHash string
+	EndedAt      pgtype.Timestamptz
+	ID           int64
+}
+
+// Ends every token issued up to ended_at (sessions_valid_after), unless one
+// already ended later.
+func (q *Queries) ChangeOwnPassword(ctx context.Context, arg ChangeOwnPasswordParams) error {
+	_, err := q.db.Exec(ctx, changeOwnPassword, arg.PasswordHash, arg.EndedAt, arg.ID)
+	return err
+}
+
 const checkUserVehicleAssignment = `-- name: CheckUserVehicleAssignment :one
 SELECT user_id, vehicle_id
 FROM user_vehicles
@@ -531,6 +551,20 @@ func (q *Queries) DeleteLocationPointsBefore(ctx context.Context, arg DeleteLoca
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const deleteOtherRefreshTokensForUser = `-- name: DeleteOtherRefreshTokensForUser :exec
+DELETE FROM refresh_tokens WHERE user_id = $1 AND token_hash <> $2
+`
+
+type DeleteOtherRefreshTokensForUserParams struct {
+	UserID    int64
+	TokenHash string
+}
+
+func (q *Queries) DeleteOtherRefreshTokensForUser(ctx context.Context, arg DeleteOtherRefreshTokensForUserParams) error {
+	_, err := q.db.Exec(ctx, deleteOtherRefreshTokensForUser, arg.UserID, arg.TokenHash)
+	return err
 }
 
 const deleteRefreshTokensForUser = `-- name: DeleteRefreshTokensForUser :exec
@@ -1147,6 +1181,22 @@ func (q *Queries) GetUserByID(ctx context.Context, id int64) (GetUserByIDRow, er
 	return i, err
 }
 
+const getUserCredentials = `-- name: GetUserCredentials :one
+SELECT email, password_hash FROM users WHERE id = $1
+`
+
+type GetUserCredentialsRow struct {
+	Email        string
+	PasswordHash string
+}
+
+func (q *Queries) GetUserCredentials(ctx context.Context, id int64) (GetUserCredentialsRow, error) {
+	row := q.db.QueryRow(ctx, getUserCredentials, id)
+	var i GetUserCredentialsRow
+	err := row.Scan(&i.Email, &i.PasswordHash)
+	return i, err
+}
+
 const getUserForUpdate = `-- name: GetUserForUpdate :one
 SELECT name, email, role, active FROM users WHERE id = $1 FOR NO KEY UPDATE
 `
@@ -1172,6 +1222,18 @@ func (q *Queries) GetUserForUpdate(ctx context.Context, id int64) (GetUserForUpd
 		&i.Active,
 	)
 	return i, err
+}
+
+const getUserPasswordForUpdate = `-- name: GetUserPasswordForUpdate :one
+SELECT password_hash FROM users WHERE id = $1 FOR UPDATE
+`
+
+// LockUser's lock, reading the password the change that follows replaces.
+func (q *Queries) GetUserPasswordForUpdate(ctx context.Context, id int64) (string, error) {
+	row := q.db.QueryRow(ctx, getUserPasswordForUpdate, id)
+	var password_hash string
+	err := row.Scan(&password_hash)
+	return password_hash, err
 }
 
 const getVehicleActiveForShare = `-- name: GetVehicleActiveForShare :one

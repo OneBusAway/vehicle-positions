@@ -332,6 +332,63 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /api/v1/auth/password:
+    post:
+      tags: [auth]
+      summary: Change the caller's own password
+      description: |
+        Sets a new password, given the current one, and ends every other sign-in
+        of the account at once: every access token issued before the change,
+        and every refresh token but the one sent. That one stays good, so the
+        caller refreshes with it and goes on. Requires a driver or admin bearer
+        token; a `viewer` token is refused with `403`. Request bodies are capped
+        at 1 KiB.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '204':
+          description: Password changed.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: |
+            `refresh_token` is not a current one of the account's, such as one
+            already exchanged. Nothing was changed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          description: |
+            `current_password` is wrong. Not a `401`, which says the sign-in is
+            over.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: |
+            Too many wrong passwords. They count with the account's failed
+            logins.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
   /api/v1/vehicles:
     get:
       tags: [vehicles]
@@ -2590,6 +2647,22 @@ components:
           description: |
             The `refresh_token` from the most recent login or refresh response.
             Each one works once.
+
+    ChangePasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [current_password, new_password, refresh_token]
+      properties:
+        current_password:
+          type: string
+          format: password
+        new_password:
+          $ref: '#/components/schemas/Password'
+        refresh_token:
+          type: string
+          description: |
+            The caller's own `refresh_token`, from its most recent login or
+            refresh response: the sign-in that goes on.
 
     LocationHistoryRequest:
       type: object

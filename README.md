@@ -353,7 +353,8 @@ one with `409`, and making an account a viewer unassigns its vehicles in the
 same transaction, refused with `409` while it has a trip running. On the Audit
 log page a viewer sees who each row is by but not the address it came
 from, and `GET /api/v1/admin/audit` leaves `actor_ip` out of a viewer's
-entries.
+entries. `POST /api/v1/auth/password`, with which a driver changes their own
+password, is part of the driver API too.
 
 **Paged admin lists**
 
