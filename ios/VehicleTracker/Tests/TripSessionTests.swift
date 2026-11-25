@@ -161,6 +161,17 @@ import VehiclePositionsKit
         #expect(s.settings.recentVehicleIDs == ["bus-1"])
     }
 
+    /// So does the theme.
+    @Test func signOutKeepsTheTheme() async throws {
+        let s = session()
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+        s.settings.theme = .dark
+
+        await s.signOut()
+        #expect(s.phase == .signedOut)
+        #expect(s.settings.theme == .dark)
+    }
+
     @Test func startFailureReturnsToIdle() async throws {
         api.startError = APIError.status(409, message: "driver already has an active trip")
         let s = session()

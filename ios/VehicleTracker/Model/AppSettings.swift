@@ -16,6 +16,12 @@ nonisolated enum DriverFlag: String {
     case firstTripDone
 }
 
+/// Light, dark, or as the phone is, chosen in Settings. It is the phone's, not
+/// the driver's: a sign-out leaves it.
+nonisolated enum ThemeChoice: String, CaseIterable {
+    case system, light, dark
+}
+
 /// What the driver typed last time, so the login screen and the route list
 /// start where they left off, and the server address the agency sets, if any.
 /// Nothing secret lives here; the token is in the Keychain.
@@ -52,6 +58,10 @@ final class AppSettings {
     private(set) var recentVehicleIDs: [String] {
         didSet { defaults.set(recentVehicleIDs, forKey: Keys.recentVehicles) }
     }
+    /// The theme the phone's screens are shown in.
+    var theme: ThemeChoice {
+        didSet { defaults.set(theme.rawValue, forKey: Keys.theme) }
+    }
     /// What each driver has been shown once, by `driverKey`: per driver, not
     /// per phone, so the next driver on a shared phone is shown it too. A
     /// sign-out leaves it. Stored sorted, so the file does not churn.
@@ -84,6 +94,7 @@ final class AppSettings {
         // still offered after the update. The old key is read, never deleted.
         recentVehicleIDs = defaults.stringArray(forKey: Keys.recentVehicles)
             ?? [defaults.string(forKey: Keys.legacyLastVehicle)].compactMap { $0 }
+        theme = defaults.string(forKey: Keys.theme).flatMap(ThemeChoice.init) ?? .system
         seenByDriver = (defaults.dictionary(forKey: Keys.seenByDriver) as? [String: [String]] ?? [:]).mapValues(Set.init)
         readManagedConfiguration()
         if !defaultServerURL.isEmpty && self.defaultServerURL == nil {
@@ -188,6 +199,7 @@ final class AppSettings {
         static let recentRoutes = "recentRouteIDs"
         static let favoriteVehicles = "favoriteVehicleIDs"
         static let recentVehicles = "recentVehicleIDs"
+        static let theme = "theme"
         static let seenByDriver = "seenByDriver"
         /// Written by builds before favourites and recents; read as a fallback only.
         static let legacyLastVehicle = "lastVehicleID"

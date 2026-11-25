@@ -160,6 +160,8 @@ import Testing
         #expect(SettingsText.title == "Settings")
         #expect(SettingsText.appSection == "App")
         #expect(SettingsText.language == "Language")
+        #expect(SettingsText.theme == "Theme")
+        #expect(ThemeChoice.allCases.map(SettingsText.name) == ["System", "Light", "Dark"])
         #expect(SettingsText.aboutSection == "About")
         #expect(SettingsText.version == "Version")
         #expect(SettingsText.shareDiagnostics == "Share diagnostics")

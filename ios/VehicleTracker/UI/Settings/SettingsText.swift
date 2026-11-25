@@ -3,7 +3,7 @@ import Foundation
 /// Every word Settings shows of its own, in Android's words (`settings_*`).
 nonisolated enum SettingsText {
     static var title: String {
-        String(localized: "Settings", comment: "The title of the app's own Settings page, opened from the account button on each picker screen.")
+        String(localized: "Settings", comment: "The title of the app's own Settings page, and the VoiceOver label of the account button on each picker screen, which opens it.")
     }
 
     // MARK: The header
@@ -48,6 +48,18 @@ nonisolated enum SettingsText {
 
     static var language: String {
         String(localized: "Language", comment: "Settings: the row that names the language the app is shown in, at its end. A tap opens the app's page in the Settings app, where its language is chosen.")
+    }
+
+    static var theme: String {
+        String(localized: "Theme", comment: "Settings: the row that names the theme the app is shown in, at its end. A tap opens a menu of the themes.")
+    }
+
+    static func name(of theme: ThemeChoice) -> String {
+        switch theme {
+        case .system: String(localized: "System", comment: "Settings, a theme: the app is light or dark as the phone is.")
+        case .light: String(localized: "Light", comment: "Settings, a theme: the app is light whatever the phone is.")
+        case .dark: String(localized: "Dark", comment: "Settings, a theme: the app is dark whatever the phone is.")
+        }
     }
 
     static var aboutSection: String {

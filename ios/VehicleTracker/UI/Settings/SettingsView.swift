@@ -5,7 +5,7 @@ private let groupCorner: CGFloat = 26
 
 /// Settings, opened from the account button on the pickers: whether this
 /// phone can report a trip, who is signed in and Sign out, the app's
-/// language, Help, Share diagnostics and the build. Android's
+/// language and theme, Help, Share diagnostics and the build. Android's
 /// `SettingsScreen`.
 struct SettingsView: View {
     let access: any LocationAccess
@@ -42,6 +42,8 @@ struct SettingsView: View {
                     AccountCard()
                     SettingsGroup(title: SettingsText.appSection) {
                         LanguageSettingsRow()
+                        SettingsDivider()
+                        ThemeSettingsRow()
                     }
                     AboutGroup()
                 }
@@ -214,10 +216,35 @@ private struct LanguageSettingsRow: View {
 
     var body: some View {
         Button { openURL(.appSettings) } label: {
-            SettingsRow(symbol: "globe", title: SettingsText.language, value: AppLanguage.ownName(AppLanguage.shownCode), opens: true)
+            SettingsRow(symbol: "globe", title: SettingsText.language, value: AppLanguage.ownName(AppLanguage.shownCode), end: .opens)
         }
         .buttonStyle(SettingsRowStyle())
         .accessibilityHint(TripStatusText.opensSettings)
+    }
+}
+
+/// The app's theme, and the menu a tap opens, the chosen one checked.
+private struct ThemeSettingsRow: View {
+    @Environment(TripSession.self) private var session
+
+    var body: some View {
+        @Bindable var settings = session.settings
+        let chosen = SettingsText.name(of: settings.theme)
+        SettingsRow(symbol: "circle.lefthalf.filled", title: SettingsText.theme, value: chosen, end: .chooses)
+            .accessibilityHidden(true)
+            // Over the row rather than with the row as its label: iOS turns a
+            // menu's label into the menu, and the row would go.
+            .overlay {
+                Menu {
+                    Picker(SettingsText.theme, selection: $settings.theme) {
+                        ForEach(ThemeChoice.allCases, id: \.self) { Text(SettingsText.name(of: $0)) }
+                    }
+                } label: {
+                    Color.clear.contentShape(.rect)
+                }
+                .accessibilityLabel(SettingsText.theme)
+                .accessibilityValue(chosen)
+            }
     }
 }
 
@@ -233,12 +260,12 @@ private struct AboutGroup: View {
     var body: some View {
         SettingsGroup(title: SettingsText.aboutSection, footer: SettingsText.shareDiagnosticsDetail) {
             NavigationLink(value: PickerRoute.help) {
-                SettingsRow(symbol: "questionmark.circle", title: HelpText.title, opens: true)
+                SettingsRow(symbol: "questionmark.circle", title: HelpText.title, end: .opens)
             }
             .buttonStyle(SettingsRowStyle())
             SettingsDivider()
             Button(action: share) {
-                SettingsRow(symbol: "square.and.arrow.up", title: SettingsText.shareDiagnostics, isBusy: writing)
+                SettingsRow(symbol: "square.and.arrow.up", title: SettingsText.shareDiagnostics, end: writing ? .busy : nil)
             }
             .buttonStyle(SettingsRowStyle())
             .disabled(writing || shared != nil)
@@ -324,13 +351,20 @@ private struct SettingsDivider: View {
 }
 
 /// A row: its symbol, its title, its value at the end or, where both don't
-/// fit, under the title, and an arrow when it `opens` something.
+/// fit, under the title, and what is at its end.
 private struct SettingsRow: View {
+    enum End {
+        /// An arrow: it opens something.
+        case opens
+        /// Two small arrows: it opens a menu to choose from.
+        case chooses
+        case busy
+    }
+
     let symbol: String
     let title: String
     var value: String?
-    var opens = false
-    var isBusy = false
+    var end: End?
 
     @Environment(\.dynamicTypeSize) private var typeSize
 
@@ -348,18 +382,23 @@ private struct SettingsRow: View {
                 .accessibilityHidden(true)
             words
                 .frame(maxWidth: .infinity, alignment: .leading)
-            if isBusy {
-                ProgressView()
-            } else if opens {
-                Image(systemName: "chevron.forward")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-                    .accessibilityHidden(true)
+            switch end {
+            case .opens: arrow("chevron.forward")
+            case .chooses: arrow("chevron.up.chevron.down")
+            case .busy: ProgressView()
+            case nil: EmptyView()
             }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .frame(minHeight: 52)
+    }
+
+    private func arrow(_ symbol: String) -> some View {
+        Image(systemName: symbol)
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(.tertiary)
+            .accessibilityHidden(true)
     }
 
     @ViewBuilder private var words: some View {

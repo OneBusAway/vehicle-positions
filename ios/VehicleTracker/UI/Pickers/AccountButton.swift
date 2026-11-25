@@ -43,7 +43,7 @@ private struct ShowSettingsButton: View {
             if session.isSigningOut {
                 ProgressView()
             } else {
-                Label(AccountText.title, systemImage: "person.crop.circle")
+                Label(SettingsText.title, systemImage: "person.crop.circle")
             }
         }
         .disabled(session.isSigningOut || session.phase.isStarting)
@@ -61,10 +61,6 @@ nonisolated enum AccountText {
     /// The server as Settings names it: its host.
     static func serverText(_ url: URL?) -> String {
         url?.host() ?? ""
-    }
-
-    static var title: String {
-        String(localized: "Account", comment: "VoiceOver label of the account button on each picker screen, which opens Settings.")
     }
 
     static var signOut: String {
