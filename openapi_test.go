@@ -111,6 +111,8 @@ var schemaStructs = map[string]string{
 	"VehicleList":          "vehicleListResponse",
 	"Trip":                 "TripResponse",
 	"TripSummary":          "TripSummary",
+	"MyTrip":               "myTrip",
+	"MyTripList":           "myTripListResponse",
 	"Assignment":           "AssignmentResponse",
 	"LiveVehicles":         "liveVehiclesResponse",
 	"LiveVehicleEntry":     "liveVehicleEntry",
