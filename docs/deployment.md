@@ -1188,6 +1188,14 @@ bundle can't be installed on a phone, so hand drivers the APK. Every phone gets
 all of the app's languages, not only the phone's own, so that the app's language
 list works.
 
+Play App Signing signs what Play installs with a key Google makes, unless you
+give Play your own before a release reaches open testing or production. Android
+installs an update only over a copy signed with the same key, so a phone with
+your APK can't update to the Play build, or the other way round: the driver has
+to uninstall first. If some drivers already have the APK, give Play your key. If
+none do, you can let Google make it and hand out the universal APK the Play
+Console signs with it.
+
 ### 12.5 Get it onto driver phones
 
 Most agencies deploying this have no Play Store presence, so sideload:

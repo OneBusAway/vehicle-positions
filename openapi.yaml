@@ -1159,9 +1159,7 @@ paths:
           name: offset
           required: false
           schema:
-            type: integer
-            minimum: 0
-            default: 0
+            $ref: '#/components/schemas/ListOffset'
           description: Number of rides to skip.
       responses:
         '200':
@@ -1477,9 +1475,7 @@ paths:
           name: offset
           required: false
           schema:
-            type: integer
-            minimum: 0
-            default: 0
+            $ref: '#/components/schemas/ListOffset'
           description: Number of trips to skip.
       responses:
         '200':
@@ -2212,9 +2208,7 @@ paths:
           name: offset
           required: false
           schema:
-            type: integer
-            minimum: 0
-            default: 0
+            $ref: '#/components/schemas/ListOffset'
           description: Number of trips to skip.
       responses:
         '200':
