@@ -55,6 +55,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import org.onebusaway.vehicletracker.R
+import org.onebusaway.vehicletracker.data.ScreenOn
 import org.onebusaway.vehicletracker.data.ThemeChoice
 import org.onebusaway.vehicletracker.ui.account.AccountUiState
 import org.onebusaway.vehicletracker.ui.account.AccountViewModel
@@ -79,21 +80,24 @@ private const val STACKS_FROM_TEXT = 1.3f
 
 /**
  * Settings, opened from the account button: whether this phone can report a trip, who is signed in and Sign out, what the
- * app is allowed, its language and theme, Help and the build. [onSignedOut] is the phone having forgotten the driver.
+ * app is allowed and does during a trip, its language and theme, Help and the build. [onSignedOut] is the phone having forgotten the driver.
  */
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
     onPermissionCheck: () -> Unit,
+    onTripSettings: () -> Unit,
     onHelp: () -> Unit,
     onSignedOut: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
+    tripSettingsViewModel: TripSettingsViewModel = hiltViewModel(),
     accountViewModel: AccountViewModel = hiltViewModel(),
 ) {
     val account by accountViewModel.uiState.collectAsStateWithLifecycle()
     val version by viewModel.version.collectAsStateWithLifecycle()
     val waiting by viewModel.waiting.collectAsStateWithLifecycle()
     val theme by viewModel.theme.collectAsStateWithLifecycle()
+    val tripSettings by tripSettingsViewModel.settings.collectAsStateWithLifecycle()
     val activity = LocalActivity.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -109,10 +113,12 @@ fun SettingsScreen(
         account = account,
         version = version,
         theme = theme,
+        screenOn = tripSettings.screenOn,
         onBack = onBack,
         // Only a location that stops a trip has the button.
         onFix = { fixes.fix(if (readiness.state == ReadinessState.LocationOff) PermissionRow.LOCATION_SERVICES else PermissionRow.LOCATION) },
         onPermissionCheck = onPermissionCheck,
+        onTripSettings = onTripSettings,
         onSignOut = accountViewModel::onSignOut,
         onSignedOut = onSignedOut,
         onChooseTheme = { if (viewModel.onChooseTheme(it)) activity?.recreate() },
@@ -150,9 +156,11 @@ internal fun SettingsContent(
     account: AccountUiState,
     version: String,
     theme: ThemeChoice,
+    screenOn: ScreenOn,
     onBack: () -> Unit,
     onFix: () -> Unit,
     onPermissionCheck: () -> Unit,
+    onTripSettings: () -> Unit,
     onSignOut: () -> Unit,
     onSignedOut: () -> Unit,
     onChooseTheme: (ThemeChoice) -> Unit,
@@ -178,6 +186,14 @@ internal fun SettingsContent(
             AccountCard(account) { confirming = true }
             GroupTitle(R.string.settings_group_phone)
             PermissionCheckRow(readiness.state, onPermissionCheck)
+            SettingsRow(
+                icon = R.drawable.ic_near_me,
+                title = stringResource(R.string.trip_settings_title),
+                detail = stringResource(if (screenOn == ScreenOn.ALWAYS) R.string.settings_screen_always else R.string.settings_screen_charging),
+                place = GroupPlace.LAST,
+                opens = true,
+                onClick = onTripSettings,
+            )
             GroupTitle(R.string.settings_group_app)
             LanguageChooser { shown, opensPhoneSettings, onClick ->
                 SettingsRow(
@@ -265,7 +281,7 @@ private fun PermissionCheckRow(state: ReadinessState, onClick: () -> Unit) {
                     pluralStringResource(R.plurals.settings_fix_many, state.toFix.size, state.toFix.size)
                 }
         },
-        place = GroupPlace.ONLY,
+        place = GroupPlace.FIRST,
         opens = true,
         iconTint = if (allAllowed) Color.Unspecified else AppTheme.problemColors.iconOnSurface,
         onClick = onClick,

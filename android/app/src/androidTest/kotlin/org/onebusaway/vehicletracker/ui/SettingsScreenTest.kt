@@ -61,6 +61,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.onebusaway.vehicletracker.R
 import org.onebusaway.vehicletracker.data.ReportsWaiting
+import org.onebusaway.vehicletracker.data.ScreenOn
 import org.onebusaway.vehicletracker.data.ThemeChoice
 import org.onebusaway.vehicletracker.data.WaitingOutlook
 import org.onebusaway.vehicletracker.ui.account.AccountButton
@@ -98,6 +99,7 @@ class SettingsScreenTest {
         var back = 0
         var fixes = 0
         var permissionCheck = 0
+        var tripSettings = 0
         var signOuts = 0
         var signedOut = 0
         val themes = mutableListOf<ThemeChoice>()
@@ -113,6 +115,7 @@ class SettingsScreenTest {
         locationFix: Fix = Fix.ALLOW,
         account: AccountUiState = this.account,
         theme: ThemeChoice = ThemeChoice.SYSTEM,
+        screenOn: ScreenOn = ScreenOn.CHARGING,
         dark: Boolean = false,
     ) {
         AppTheme(darkTheme = dark) {
@@ -122,9 +125,11 @@ class SettingsScreenTest {
                 account = account,
                 version = "0.1.0 (1)",
                 theme = theme,
+                screenOn = screenOn,
                 onBack = { calls.back++ },
                 onFix = { calls.fixes++ },
                 onPermissionCheck = { calls.permissionCheck++ },
+                onTripSettings = { calls.tripSettings++ },
                 onSignOut = { calls.signOuts++ },
                 onSignedOut = { calls.signedOut++ },
                 onChooseTheme = { calls.themes += it },
@@ -518,6 +523,19 @@ class SettingsScreenTest {
         compose.onNode(hasText(string(R.string.language_list_title)) and hasText("English") and hasClickAction()).performScrollTo().performClick()
 
         compose.onNode(hasText("English") and hasAnyAncestor(isDialog())).assertExists()
+    }
+
+    @Test
+    fun theDuringATripRowSaysWhenTheScreenStaysOn_andOpensIt() {
+        var screenOn by mutableStateOf(ScreenOn.CHARGING)
+        compose.setContent { Content(screenOn = screenOn) }
+        fun row(detail: Int) = compose.onNode(hasText(string(R.string.trip_settings_title)) and hasText(string(detail)) and hasClickAction())
+
+        row(R.string.settings_screen_charging).performScrollTo().performClick()
+        screenOn = ScreenOn.ALWAYS
+        row(R.string.settings_screen_always).performScrollTo().performClick()
+
+        assertEquals(2, calls.tripSettings)
     }
 
     @Test

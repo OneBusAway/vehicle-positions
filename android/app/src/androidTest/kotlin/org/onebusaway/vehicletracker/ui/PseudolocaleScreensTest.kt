@@ -27,7 +27,9 @@ import org.junit.runner.RunWith
 import org.junit.runners.Parameterized
 import org.onebusaway.vehicletracker.R
 import org.onebusaway.vehicletracker.data.ActiveTrip
+import org.onebusaway.vehicletracker.data.ScreenOn
 import org.onebusaway.vehicletracker.data.ThemeChoice
+import org.onebusaway.vehicletracker.data.TripSettings
 import org.onebusaway.vehicletracker.data.TrackingProblem
 import org.onebusaway.vehicletracker.data.TrackingState
 import org.onebusaway.vehicletracker.data.api.VehicleDto
@@ -66,6 +68,7 @@ import org.onebusaway.vehicletracker.ui.runs.runBoardTipText
 import org.onebusaway.vehicletracker.ui.settings.PermissionCheckContent
 import org.onebusaway.vehicletracker.ui.settings.PhoneAccess
 import org.onebusaway.vehicletracker.ui.settings.SettingsContent
+import org.onebusaway.vehicletracker.ui.settings.TripSettingsContent
 import org.onebusaway.vehicletracker.ui.settings.readiness
 import org.onebusaway.vehicletracker.ui.theme.AppTheme
 import org.onebusaway.vehicletracker.ui.tracking.TrackingScreenContent
@@ -264,8 +267,14 @@ class PseudolocaleScreensTest(private val tag: String) {
             account = AccountUiState("driver@example.com", "tracker.example.org"),
             version = "0.1.0 (1)",
             theme = ThemeChoice.SYSTEM,
-            onBack = {}, onFix = {}, onPermissionCheck = {}, onSignOut = {}, onSignedOut = {}, onChooseTheme = {}, onHelp = {}, onShare = {},
+            screenOn = ScreenOn.CHARGING,
+            onBack = {}, onFix = {}, onPermissionCheck = {}, onTripSettings = {}, onSignOut = {}, onSignedOut = {}, onChooseTheme = {}, onHelp = {}, onShare = {},
         )
+    }
+
+    @Test
+    fun duringATrip() = check("during-a-trip", R.string.trip_settings_title) {
+        TripSettingsContent(TripSettings(), onBack = {}, onScreenOn = {}, onMapUp = {}, onVibrates = {})
     }
 
     @Test
