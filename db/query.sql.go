@@ -507,6 +507,20 @@ func (q *Queries) DeleteExpiredRefreshTokens(ctx context.Context, cutoff pgtype.
 	return result.RowsAffected(), nil
 }
 
+const deleteExpiredRevocations = `-- name: DeleteExpiredRevocations :execrows
+DELETE FROM revoked_tokens WHERE expires_at < $1
+`
+
+// idx_revoked_tokens_expires_at serves it. The caller's cutoff is a while after
+// the tokens expired (revocationGrace).
+func (q *Queries) DeleteExpiredRevocations(ctx context.Context, cutoff pgtype.Timestamptz) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredRevocations, cutoff)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteFeedHealthHoursBefore = `-- name: DeleteFeedHealthHoursBefore :execrows
 DELETE FROM feed_health_hours WHERE hour < $1
 `

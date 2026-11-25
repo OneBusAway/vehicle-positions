@@ -375,18 +375,18 @@ func main() {
 	refreshLimiter := NewRefreshRateLimiter()
 	defer refreshLimiter.Stop()
 
-	// Expired refresh tokens are unusable by every path that reads them, so
-	// pruning them is garbage collection rather than a retention policy — it
-	// runs by default and has no "keep forever" setting. A bad interval only
-	// turns the job off: an optional cleanup is not worth refusing to serve
-	// vehicles over.
-	refreshPruneInterval := envDurationOrDefault("REFRESH_TOKEN_PRUNE_INTERVAL", time.Hour)
-	refreshPruner, err := NewRefreshTokenPruner(store, refreshPruneInterval)
+	// Expired refresh tokens are unusable by every path that reads them, and an
+	// expired access token is refused whether or not it was revoked, so pruning
+	// their rows is garbage collection rather than a retention policy — it runs
+	// by default and has no "keep forever" setting. A bad interval only turns the
+	// job off: an optional cleanup is not worth refusing to serve vehicles over.
+	tokenPruneInterval := envDurationOrDefault("REFRESH_TOKEN_PRUNE_INTERVAL", time.Hour)
+	tokenPruner, err := NewTokenPruner(store, tokenPruneInterval)
 	if err != nil {
-		slog.Error("refresh token pruning disabled: invalid configuration", "error", err)
+		slog.Error("token pruning disabled: invalid configuration", "error", err)
 	} else {
-		defer refreshPruner.Stop()
-		slog.Info("refresh token pruning enabled", "interval", refreshPruneInterval.String())
+		defer tokenPruner.Stop()
+		slog.Info("token pruning enabled", "interval", tokenPruneInterval.String())
 	}
 
 	// Retention is opt-in: a zero period means keep location history forever,
