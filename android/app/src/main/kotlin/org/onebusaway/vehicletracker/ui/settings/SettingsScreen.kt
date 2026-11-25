@@ -56,6 +56,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import org.onebusaway.vehicletracker.R
 import org.onebusaway.vehicletracker.data.ScreenOn
+import org.onebusaway.vehicletracker.data.TripSettings
 import org.onebusaway.vehicletracker.data.ThemeChoice
 import org.onebusaway.vehicletracker.ui.account.AccountUiState
 import org.onebusaway.vehicletracker.ui.account.AccountViewModel
@@ -113,7 +114,7 @@ fun SettingsScreen(
         account = account,
         version = version,
         theme = theme,
-        screenOn = tripSettings.screenOn,
+        screenOn = (tripSettings ?: TripSettings()).screenOn,
         onBack = onBack,
         // Only a location that stops a trip has the button.
         onFix = { fixes.fix(if (readiness.state == ReadinessState.LocationOff) PermissionRow.LOCATION_SERVICES else PermissionRow.LOCATION) },

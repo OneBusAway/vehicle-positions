@@ -45,7 +45,9 @@ class TrackingViewModel @Inject constructor(
     mapFiles: MapFileSource,
     waitingReports: WaitingReports,
 ) : ViewModel() {
-    private val _uiState = MutableStateFlow(TrackingUiState())
+    // Starts from what the repositories have, as the stored trip is still to be read: a problem there already is not one
+    // that comes up once the screen has opened, and the map is drawn once, with its file.
+    private val _uiState = MutableStateFlow(TrackingUiState(tracking = trackingRepository.state.value, mapFile = mapFiles.state.value))
     val uiState: StateFlow<TrackingUiState> = _uiState.asStateFlow()
 
     init {

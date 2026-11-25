@@ -12,12 +12,16 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import org.onebusaway.vehicletracker.data.TrackingProblem
+import org.onebusaway.vehicletracker.data.TripSettings
 
 private const val VIBRATION_MS = 200L
 
 /** A problem that appears, or gives way to another, vibrates the phone; one that clears does not, as on iOS. */
 internal fun vibratesFor(before: TrackingProblem, problem: TrackingProblem): Boolean =
     problem != TrackingProblem.NONE && problem != before
+
+/** Whether [chosen] has the phone vibrate. Not until it is read, as the driver may have switched it off. */
+internal fun vibrationOn(chosen: TripSettings?): Boolean = chosen?.vibrates ?: false
 
 /**
  * Vibrates once for each problem that comes up while Tracking is on screen, while it is [on]. Not for one that is there

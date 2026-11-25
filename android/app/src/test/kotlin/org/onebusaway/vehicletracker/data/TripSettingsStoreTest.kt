@@ -11,10 +11,12 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
+import java.io.IOException
 
 /** [DataStoreTripSettingsStore] against a real file-backed DataStore, as [VehiclePrefsStoreTest]. */
 class TripSettingsStoreTest {
@@ -64,5 +66,19 @@ class TripSettingsStoreTest {
         }
 
         assertEquals(TripSettings(), DataStoreTripSettingsStore(dataStore).settings.first())
+    }
+
+    @Test fun `choices that can't be read are the defaults`() = runTest {
+        val store = DataStoreTripSettingsStore(FailingDataStore(IOException("the file is gone")))
+
+        assertEquals(TripSettings(), store.settings.first())
+    }
+
+    @Test fun `a non-IO storage failure is not swallowed`() = runTest {
+        val store = DataStoreTripSettingsStore(FailingDataStore(IllegalStateException("a bug, not a bad disk")))
+
+        val failure = runCatching { store.settings.first() }.exceptionOrNull()
+
+        assertTrue("expected an IllegalStateException, got $failure", failure is IllegalStateException)
     }
 }

@@ -77,15 +77,16 @@ private val CardMargin = 12.dp
 private val RowsFadeDistance = 48.dp
 
 /**
- * [tripSettings] is what the driver chose for it. [sentCountTip] is the tip on the sent count, for a driver's first trip. Null where the screen is shown without the
- * app's own dependencies, as in a test of the rest of it.
+ * [tripSettings] is what the driver chose for it, null until read. [sentCountTip] is the tip on the sent count, for a
+ * driver's first trip. Both are null where the screen is shown without the app's own dependencies, as in a test of the rest
+ * of it.
  */
 @Composable
 fun TrackingScreen(
     onTripEnded: () -> Unit,
     onReauthRequired: () -> Unit,
     viewModel: TrackingViewModel = hiltViewModel(),
-    tripSettings: TripSettings = TripSettings(),
+    tripSettings: TripSettings? = null,
     sentCountTip: SentCountTipViewModel? = null,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -101,10 +102,11 @@ fun TrackingScreen(
             viewModel.onNavigated()
         }
     }
-    KeepScreenOn(tripSettings.screenOn)
+    val chosen = tripSettings ?: TripSettings()
+    KeepScreenOn(chosen.screenOn)
     val context = LocalContext.current
     val vibrate = remember(context) { problemVibration(context) }
-    VibrateOnProblem(state.tracking.problem, tripSettings.vibrates, vibrate)
+    VibrateOnProblem(state.tracking.problem, vibrationOn(tripSettings), vibrate)
     val mapSupported = remember { supportsMap(context.glEsVersion()) }
     // Its state is kept here, and only the tip reads it, so neither the map nor the panel is recomposed for it.
     val sentTip = rememberScreenTip()
@@ -122,7 +124,7 @@ fun TrackingScreen(
                 val geometry = state.tracking.geometry
                 if (mapSupported && geometry != null) {
                     val ring = AppTheme.statusColors[vehicleTone(state.tracking.adherence, state.tracking.problem)].text
-                    RouteMap(geometry, state.tracking.adherence, state.mapFile, ring.toArgb(), tripSettings.mapUp, contentPadding, controlsPadding, modifier)
+                    RouteMap(geometry, state.tracking.adherence, state.mapFile, ring.toArgb(), chosen.mapUp, contentPadding, controlsPadding, modifier)
                 } else {
                     Spacer(modifier)
                 }

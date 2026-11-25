@@ -11,9 +11,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -400,13 +398,6 @@ class SessionStoreTest {
     @Test fun `a token with nothing to refresh it with, or no known expiry, is never due a refresh`() {
         assertNull(Session(SERVER, TOKEN, ISSUED_AT, refreshToken = null, accessExpiresAtEpochSec = EXPIRES_AT).refreshDueAtEpochSec)
         assertNull(Session(SERVER, TOKEN, ISSUED_AT).refreshDueAtEpochSec)
-    }
-
-    /** Stands in for storage that cannot be read at all, so the failure paths are reachable. */
-    private class FailingDataStore(private val failure: Throwable) : DataStore<Preferences> {
-        override val data: Flow<Preferences> = flow { throw failure }
-        override suspend fun updateData(transform: suspend (Preferences) -> Preferences): Preferences =
-            throw failure
     }
 
     private companion object {

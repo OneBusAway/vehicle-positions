@@ -5,7 +5,9 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.onebusaway.vehicletracker.data.TrackingProblem
+import org.onebusaway.vehicletracker.data.TripSettings
 import org.onebusaway.vehicletracker.ui.tracking.vibratesFor
+import org.onebusaway.vehicletracker.ui.tracking.vibrationOn
 
 /** Which changes of problem vibrate the phone, as they tap the wrist on iOS. */
 class ProblemVibrationTest {
@@ -21,5 +23,11 @@ class ProblemVibrationTest {
 
     @Test fun `a problem that clears does not`() {
         for (before in TrackingProblem.entries) assertFalse("$before", vibratesFor(before, TrackingProblem.NONE))
+    }
+
+    @Test fun `it is on only once the choice has been read`() {
+        assertFalse("not read yet", vibrationOn(null))
+        assertFalse(vibrationOn(TripSettings(vibrates = false)))
+        assertTrue(vibrationOn(TripSettings(vibrates = true)))
     }
 }

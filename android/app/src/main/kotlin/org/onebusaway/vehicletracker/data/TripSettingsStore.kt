@@ -5,10 +5,15 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
+import java.io.IOException
+
+private const val TAG = "TripSettingsStore"
 
 /** When the display stays on while Tracking shows. [storedAs] is its name on the phone. */
 enum class ScreenOn(val storedAs: String) {
@@ -22,7 +27,7 @@ enum class MapUp(val storedAs: String) {
     NORTH("north"),
 }
 
-/** What the driver chose for Tracking. The defaults are what it does when nothing was chosen. */
+/** What the driver chose for Tracking. The defaults are what it does when nothing was chosen, or nothing can be read. */
 data class TripSettings(
     val screenOn: ScreenOn = ScreenOn.CHARGING,
     val mapUp: MapUp = MapUp.HEADING,
@@ -33,6 +38,8 @@ data class TripSettings(
 /** [TripSettings] of this phone. They are the phone's, not the driver's, so they stay through Sign out. */
 interface TripSettingsStore {
     val settings: Flow<TripSettings>
+
+    /** Each throws [IOException] when the phone can't save the choice. */
     suspend fun setScreenOn(screenOn: ScreenOn)
     suspend fun setMapUp(mapUp: MapUp)
     suspend fun setVibrates(vibrates: Boolean)
@@ -48,14 +55,22 @@ class DataStoreTripSettingsStore(private val dataStore: DataStore<Preferences>) 
         val VIBRATES = booleanPreferencesKey("vibrates")
     }
 
-    override val settings: Flow<TripSettings> = dataStore.data.map { prefs ->
-        val none = TripSettings()
-        TripSettings(
-            screenOn = ScreenOn.entries.find { it.storedAs == prefs[Keys.SCREEN_ON] } ?: none.screenOn,
-            mapUp = MapUp.entries.find { it.storedAs == prefs[Keys.MAP_UP] } ?: none.mapUp,
-            vibrates = prefs[Keys.VIBRATES] ?: none.vibrates,
-        )
-    }
+    override val settings: Flow<TripSettings> = dataStore.data
+        // Choices that can't be read are the defaults, as for the session: Tracking collects this, and a read failure let
+        // through would crash it. Anything that is not an IO failure still propagates.
+        .catch { e ->
+            if (e !is IOException) throw e
+            AppLog.w(TAG, "Could not read the trip settings", e)
+            emit(emptyPreferences())
+        }
+        .map { prefs ->
+            val none = TripSettings()
+            TripSettings(
+                screenOn = ScreenOn.entries.find { it.storedAs == prefs[Keys.SCREEN_ON] } ?: none.screenOn,
+                mapUp = MapUp.entries.find { it.storedAs == prefs[Keys.MAP_UP] } ?: none.mapUp,
+                vibrates = prefs[Keys.VIBRATES] ?: none.vibrates,
+            )
+        }
 
     override suspend fun setScreenOn(screenOn: ScreenOn) {
         dataStore.edit { it[Keys.SCREEN_ON] = screenOn.storedAs }

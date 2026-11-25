@@ -83,7 +83,7 @@ private const val ROUTE_FROM_NORTH = 40f
 @Composable
 fun TripSettingsScreen(onBack: () -> Unit, viewModel: TripSettingsViewModel = hiltViewModel()) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
-    TripSettingsContent(settings, onBack, viewModel::onScreenOn, viewModel::onMapUp, viewModel::onVibrates)
+    TripSettingsContent(settings ?: TripSettings(), onBack, viewModel::onScreenOn, viewModel::onMapUp, viewModel::onVibrates)
 }
 
 @Composable
