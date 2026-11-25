@@ -1231,7 +1231,7 @@ paths:
       summary: Create or update a vehicle
       description: |
         Upserts by `id`. Requires the `admin` role. Request bodies are capped
-        at 1 KiB.
+        at 8 KiB.
       requestBody:
         required: true
         content:
@@ -2200,7 +2200,7 @@ paths:
         must be assigned to the vehicle and must not already have an active
         trip. A non-empty `route_id` or `gtfs_trip_id` must be in the loaded
         GTFS schedule, and the trip must run on the route; otherwise 400.
-        Request bodies are capped at 1 KiB.
+        Request bodies are capped at 4 KiB.
       requestBody:
         required: true
         content:
