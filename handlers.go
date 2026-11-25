@@ -262,14 +262,14 @@ func handlePostLocation(store LocationStore, tracker *Tracker, rl *VehicleRateLi
 				writeJSON(w, http.StatusConflict, map[string]string{"error": "trip_id or route_id does not match the driver's active trip"})
 			default:
 				slog.Error("failed to authorize location", "vehicle_id", loc.VehicleID, "error", err)
-				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to authorize location"})
+				writeJSON(w, storeErrorStatus(err), map[string]string{"error": "failed to authorize location"})
 			}
 			return
 		}
 
 		if err := store.SaveLocation(r.Context(), &loc); err != nil {
 			slog.Error("failed to save location", "vehicle_id", loc.VehicleID, "error", err)
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save location"})
+			writeJSON(w, storeErrorStatus(err), map[string]string{"error": "failed to save location"})
 			return
 		}
 
