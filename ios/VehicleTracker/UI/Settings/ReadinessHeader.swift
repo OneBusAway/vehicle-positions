@@ -3,11 +3,15 @@ import SwiftUI
 /// The top of Settings: whether this phone can report a trip, and the line
 /// that says why. It goes behind the navigation bar. As the page scrolls it
 /// folds to its bar with the line as its lower edge: the words go up under
-/// the bar, and nothing is resized, and no body run, for a frame of it.
+/// the bar, and nothing is resized, and no body run, for a frame of it. A tap
+/// on it, folded or not, opens Permission check.
 struct ReadinessHeader: View {
     let readiness: Readiness
     @Binding var fold: HeaderFold
-    let openSettings: () -> Void
+    /// What the button does, while something the driver can put right stops a
+    /// trip.
+    let onFix: (Readiness.Fix) -> Void
+    let openCheck: () -> Void
     /// Called with what the header shows, at first and as it changes.
     let onShow: (Readiness) -> Void
 
@@ -36,11 +40,12 @@ struct ReadinessHeader: View {
     /// Enough to fill the screen above it when the page is pulled down.
     private static let above: CGFloat = 1000
 
-    init(readiness: Readiness, fold: Binding<HeaderFold>, openSettings: @escaping () -> Void,
-         onShow: @escaping (Readiness) -> Void) {
+    init(readiness: Readiness, fold: Binding<HeaderFold>, onFix: @escaping (Readiness.Fix) -> Void,
+         openCheck: @escaping () -> Void, onShow: @escaping (Readiness) -> Void) {
         self.readiness = readiness
         _fold = fold
-        self.openSettings = openSettings
+        self.onFix = onFix
+        self.openCheck = openCheck
         self.onShow = onShow
         _shown = State(initialValue: readiness)
         _position = State(initialValue: Double(readiness.vehicleAt))
@@ -77,6 +82,8 @@ struct ReadinessHeader: View {
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
         }
+        .contentShape(.rect)
+        .onTapGesture(perform: openCheck)
         .visualEffect { [fold] effect, proxy in effect.offset(y: fold.pastFold(proxy.headerScroll)) }
         .coordinateSpace(.named(GeometryProxy.headerSpace))
         .onGeometryChange(for: CGSize.self) { $0.size } action: { size in
@@ -88,7 +95,8 @@ struct ReadinessHeader: View {
         .onChange(of: shown, initial: true) { onShow(shown) }
     }
 
-    /// The words go up under it. Where it is, it takes the taps they would.
+    /// The words go up under it, and the button with them. Where it is, a tap
+    /// is the header's and not theirs.
     private var strip: some View {
         block
             .padding(.top, -Self.above)
@@ -104,8 +112,12 @@ struct ReadinessHeader: View {
                     .id(ReadinessWords(shown))
                     .transition(.opacity)
             }
-            if shown.opensSettings {
-                Button(ChecklistText.openSettings, action: openSettings)
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityHint(PermissionCheckText.title)
+            .accessibilityAction(.default, openCheck)
+            if let fix = shown.headerFix {
+                Button(PermissionCheckText.name(of: fix)) { onFix(fix) }
                     .buttonStyle(InkButtonStyle())
                     .visualEffect { [fold] effect, proxy in effect.opacity(fold.wordsOpacity(proxy.headerScroll)) }
                     .transition(.opacity)

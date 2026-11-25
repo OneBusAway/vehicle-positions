@@ -340,12 +340,16 @@ OTHER_REFRESH=$(curl -s -X POST "$BASE/api/v1/auth/login" \
    it says **Ready to report** with **Precise Location** on, and **Not ready to
    report** with it off ("Precise location is off for this app."). Then come
    `driver@example.com` and `localhost` beside **Sign out**. At the end is
-   **Version** with the app's version. Tap **Theme**, then **Dark**: the app is
-   dark at once, with **Settings** still open. Put it back to **System**. Tap
-   **Sign out**: "Sign out?" with "The next driver can sign in on this phone."
-   Tap **Sign out** again: the sign-in screen appears with the server as one
-   line, **Server localhost:8081 Change**, the email empty, and the server log
-   has the logout:
+   **Version** with the app's version. Tap the top of the page, or **Permission
+   check**: each thing the app needs is there in order, with **Allowed** or, on
+   the one that stops a trip, a button that fixes it, and no trip starts. With
+   Location Services off, the button there and at the top of **Settings** is
+   **Try again**, as on **Before you start**. Go back. Tap **Theme**, then
+   **Dark**: the app is dark at once, with **Settings** still open. Put it back
+   to **System**. Tap **Sign out**: "Sign out?" with "The next driver can sign
+   in on this phone." Tap **Sign out** again: the sign-in screen appears with
+   the server as one line, **Server localhost:8081 Change**, the email empty,
+   and the server log has the logout:
 
    ```bash
    grep '"path":"/api/v1/auth/logout"' /tmp/vt-server.log

@@ -48,15 +48,15 @@ nonisolated enum ChecklistText {
     }
 
     static var tryAgain: String {
-        String(localized: "Try again", comment: "Checklist row button: ask iOS for precise location again, or check Location Services again.")
+        String(localized: "Try again", comment: "Checklist row button: ask iOS for precise location again, or check Location Services again. Permission check and the button under 'Not ready to report' in the app's own Settings check Location Services again with it.")
     }
 
     static var openSettings: String {
-        String(localized: "Open Settings", comment: "Checklist row button, and the button under 'Not ready to report' in the app's own Settings, that opens the app's page in the Settings app, where location can be allowed.")
+        String(localized: "Open Settings", comment: "Checklist row button, Permission check's, and the button under 'Not ready to report' in the app's own Settings, that opens the app's page in the Settings app, where location can be allowed.")
     }
 
     static var `continue`: String {
-        String(localized: "Continue", comment: "The checklist's button, which asks iOS about the next row.")
+        String(localized: "Continue", comment: "The checklist's button, which asks iOS about the next row, and the one on Permission check's Location row, which asks iOS about location.")
     }
 
     static var cancel: String {

@@ -75,13 +75,22 @@ struct ChecklistRow: View {
 
 /// A row's marker, 44 pt with a 22 pt glyph (Android's `Marker`): a filled
 /// square with a check once allowed, a filled circle with the row's symbol
-/// while it is the one to act on, a dashed ring before it is reached. The
-/// state is said in words beside it. A look that comes in fades in, except
+/// while it is the one to act on, a dashed ring before it is reached, and on
+/// Permission check an amber ring with a minus when it is missing. The state
+/// is said in words beside it. A look that comes in fades in, except
 /// the check, which grows in from half its size and draws itself. A look
 /// that goes fades out.
 struct ChecklistMarker: View {
     enum Look: Hashable {
-        case done, current, pending
+        case done, current, pending, missing
+
+        init(stop: Readiness.Stop) {
+            switch stop {
+            case .allowed: self = .done
+            case .missing: self = .missing
+            case .beyond: self = .pending
+            }
+        }
 
         init(_ state: LocationChecklist.RowState) {
             switch state {
@@ -91,6 +100,8 @@ struct ChecklistMarker: View {
             }
         }
     }
+
+    static let side: CGFloat = 44
 
     let look: Look
     let symbol: String
@@ -109,9 +120,12 @@ struct ChecklistMarker: View {
             case .pending:
                 Circle().strokeBorder(Color(.separator), style: StrokeStyle(lineWidth: 2, dash: [4, 4]))
                 glyph(symbol).foregroundStyle(.secondary)
+            case .missing:
+                Circle().strokeBorder(.amberOnSurface, lineWidth: 2)
+                glyph("minus").foregroundStyle(.amberOnSurface)
             }
         }
-        .frame(width: 44, height: 44)
+        .frame(width: Self.side, height: Self.side)
     }
 
     private func glyph(_ name: String) -> some View {

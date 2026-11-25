@@ -2,12 +2,13 @@ import SwiftUI
 
 /// Vehicle → route → trip. One navigation stack whose path the vehicle
 /// screen can push onto when there is only one vehicle to choose. Settings
-/// goes on top of whichever step the account button opened it from, and Help
-/// on top of Settings.
+/// goes on top of whichever step the account button opened it from, and
+/// Permission check and Help on top of Settings.
 enum PickerRoute: Hashable {
     case routes(Vehicle)
     case trips(Vehicle, RouteInfo)
     case settings
+    case permissionCheck
     case help
 }
 
@@ -35,7 +36,9 @@ struct PickerFlow: View {
                         case .trips(let vehicle, let route):
                             TripsView(vehicle: vehicle, route: route, path: $path, vehicleReload: $vehicleReload)
                         case .settings:
-                            SettingsView(access: session.locationAccess)
+                            SettingsView(access: session.locationAccess) { path.append(.permissionCheck) }
+                        case .permissionCheck:
+                            PermissionCheckView(access: session.locationAccess)
                         case .help:
                             HelpView()
                         }

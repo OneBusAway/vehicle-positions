@@ -1237,7 +1237,7 @@
       }
     },
     "%@, %@" : {
-      "comment" : "VoiceOver label of a vehicle tile: the fleet number, then the label the agency gave the vehicle, e.g. '4317, Airport shuttle'.\nVoiceOver: a stop list row for a stop still ahead: the stop's name, then its scheduled time, e.g. 'Pine St & 4th Ave, 7:24 AM'.\nVoiceOver: the problem line in one sentence: what happened, then what it means or what to do, e.g. 'No connection, Riders can't see you'.",
+      "comment" : "VoiceOver label of a vehicle tile: the fleet number, then the label the agency gave the vehicle, e.g. '4317, Airport shuttle'.\nVoiceOver: a button on Permission check: its row's title, then what the button says, e.g. 'Location, Open Settings'.\nVoiceOver: a stop list row for a stop still ahead: the stop's name, then its scheduled time, e.g. 'Pine St & 4th Ave, 7:24 AM'.\nVoiceOver: the problem line in one sentence: what happened, then what it means or what to do, e.g. 'No connection, Riders can't see you'.",
       "localizations" : {
         "am" : {
           "stringUnit" : {
@@ -8777,6 +8777,9 @@
         }
       }
     },
+    "All allowed" : {
+      "comment" : "Settings, at the end of the Permission check row: iOS allows the app everything it needs."
+    },
     "All routes" : {
       "comment" : "Section header over every route in the schedule, as rows with names.",
       "localizations" : {
@@ -14917,7 +14920,7 @@
       }
     },
     "Continue" : {
-      "comment" : "The checklist's button, which asks iOS about the next row.\nWelcome: the button on its last screen, which goes on to choosing a vehicle.",
+      "comment" : "The checklist's button, which asks iOS about the next row, and the one on Permission check's Location row, which asks iOS about location.\nWelcome: the button on its last screen, which goes on to choosing a vehicle.",
       "localizations" : {
         "am" : {
           "stringUnit" : {
@@ -23575,8 +23578,14 @@
         }
       }
     },
+    "Location is not allowed" : {
+      "comment" : "Settings, at the end of the Permission check row: iOS does not let the app use location."
+    },
     "Location is not allowed for this app." : {
       "comment" : "Settings, under 'Not ready to report', when location was refused to the app."
+    },
+    "Location is off" : {
+      "comment" : "Settings, at the end of the Permission check row: Location Services are off for the whole phone."
     },
     "Location is off for OBA Vehicle Tracker. Turn it on in Settings to start a trip." : {
       "comment" : "Refusal when the app has no location access.",
@@ -26874,6 +26883,9 @@
         }
       }
     },
+    "Not asked yet" : {
+      "comment" : "Settings, at the end of the Permission check row: the app has not asked for location yet."
+    },
     "Not ended yet" : {
       "comment" : "CarPlay: the short form of the 'Trip not ended yet' alert's title, for a car screen too narrow for it.",
       "localizations" : {
@@ -29473,7 +29485,7 @@
       }
     },
     "Open Settings" : {
-      "comment" : "Banner button that opens the app's page in the Settings app after a start was refused for location access.\nChecklist row button, and the button under 'Not ready to report' in the app's own Settings, that opens the app's page in the Settings app, where location can be allowed.",
+      "comment" : "Banner button that opens the app's page in the Settings app after a start was refused for location access.\nChecklist row button, Permission check's, and the button under 'Not ready to report' in the app's own Settings, that opens the app's page in the Settings app, where location can be allowed.",
       "localizations" : {
         "am" : {
           "stringUnit" : {
@@ -30337,6 +30349,9 @@
         }
       }
     },
+    "Permission check" : {
+      "comment" : "The title of a page opened from Settings, with each thing the app needs, as on Before you start, and what fixes one that is missing. It names its row in Settings too, and is the VoiceOver hint on the top of Settings, which opens it."
+    },
     "Phone clock is wrong" : {
       "comment" : "Problem line: the server rejects the reports' timestamps.",
       "localizations" : {
@@ -31028,6 +31043,9 @@
           }
         }
       }
+    },
+    "Precise location is off" : {
+      "comment" : "Settings, at the end of the Permission check row: the app has only approximate location."
     },
     "Precise location is off for this app." : {
       "comment" : "Settings, under 'Not ready to report', when the app has only approximate location."
@@ -35797,6 +35815,9 @@
           }
         }
       }
+    },
+    "Riders" : {
+      "comment" : "Permission check: the last row, after all the things the app needs: whether riders can see the vehicle."
     },
     "Riders can see you coming" : {
       "comment" : "Welcome, screen 1: title.",
@@ -53037,6 +53058,12 @@
         }
       }
     },
+    "They can't see you yet." : {
+      "comment" : "Permission check, under 'Riders', when something that stops a trip is missing."
+    },
+    "They see your vehicle during a trip." : {
+      "comment" : "Permission check, under 'Riders', when everything is allowed."
+    },
     "This account can only view the admin site. Ask your agency's admin for a driver account, then sign in with it." : {
       "comment" : "Empty state text under 'Not a driver account', over a Sign in button.",
       "localizations" : {
@@ -53731,6 +53758,9 @@
           }
         }
       }
+    },
+    "This phone" : {
+      "comment" : "Settings: the heading over the rows about this iPhone, such as Permission check."
     },
     "This phone is signed in to %@. The link was not used." : {
       "comment" : "Title of the setup link alert when the phone is already signed in, so it keeps its server: the host of that server, e.g. 'This phone is signed in to tracker.example.org. The link was not used.'",
@@ -54944,7 +54974,7 @@
       }
     },
     "Try again" : {
-      "comment" : "Button in the 'Trip not ended yet' alert, and on the Resume screen after a failed end: send the end again.\nButton that retries a load or a start that failed.\nChecklist row button: ask iOS for precise location again, or check Location Services again.",
+      "comment" : "Button in the 'Trip not ended yet' alert, and on the Resume screen after a failed end: send the end again.\nButton that retries a load or a start that failed.\nChecklist row button: ask iOS for precise location again, or check Location Services again. Permission check and the button under 'Not ready to report' in the app's own Settings check Location Services again with it.",
       "localizations" : {
         "am" : {
           "stringUnit" : {
@@ -58447,6 +58477,9 @@
           }
         }
       }
+    },
+    "What the app needs to report your vehicle." : {
+      "comment" : "Under the title 'Permission check'."
     },
     "When you finish" : {
       "comment" : "Welcome, screen 2: beside a picture of the End trip button.",

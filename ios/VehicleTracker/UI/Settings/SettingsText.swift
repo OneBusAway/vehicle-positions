@@ -42,6 +42,21 @@ nonisolated enum SettingsText {
 
     // MARK: The rows
 
+    static var phoneSection: String {
+        String(localized: "This phone", comment: "Settings: the heading over the rows about this iPhone, such as Permission check.")
+    }
+
+    /// At the end of Permission check's row, in a few words.
+    static func permissions(_ readiness: Readiness) -> String {
+        switch readiness.state {
+        case .ready: String(localized: "All allowed", comment: "Settings, at the end of the Permission check row: iOS allows the app everything it needs.")
+        case .notAsked: String(localized: "Not asked yet", comment: "Settings, at the end of the Permission check row: the app has not asked for location yet.")
+        case .refused, .restricted: String(localized: "Location is not allowed", comment: "Settings, at the end of the Permission check row: iOS does not let the app use location.")
+        case .preciseOff: String(localized: "Precise location is off", comment: "Settings, at the end of the Permission check row: the app has only approximate location.")
+        case .servicesOff: String(localized: "Location is off", comment: "Settings, at the end of the Permission check row: Location Services are off for the whole phone.")
+        }
+    }
+
     static var appSection: String {
         String(localized: "App", comment: "Settings: the heading over the rows about the app itself, such as its language.")
     }
