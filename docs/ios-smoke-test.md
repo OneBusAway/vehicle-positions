@@ -250,6 +250,22 @@ GPS**, **From Stop ST1**, and the run's start time with `Bus 1`. The trip
 sheet at the bottom shows the route badge `1`, the headsign "North", the
 running time with **0 sent**, and **End trip**.
 
+Check 1c left **Always on** and **North up** chosen. Drive the route backwards,
+which turns the map round unless north is up:
+
+```bash
+xcrun simctl location "$UDID" start --speed=8 --interval=1 \
+  47.6090,-122.3300 47.6000,-122.3300
+```
+
+The map keeps north at the top, with `Stop ST3` above the vehicle, the vehicle
+in the middle of what the status card and the trip sheet leave uncovered, and
+its arrow pointing down. On an iPhone that isn't charging, the screen stays on
+past its Auto-Lock time. Then stop the route (`xcrun simctl location "$UDID"
+clear`), tap **End trip** and confirm, and tap **OK** on the sheet after a
+driver's first trip. Under **During a trip** put **On while charging** and
+**The way you drive** back, and start the run again for the checks that follow.
+
 ### Check 1b: A setup link fills in the server
 
 Steps 1 to 4 need the sign-in screen, so run them on a fresh install, before
@@ -344,12 +360,14 @@ OTHER_REFRESH=$(curl -s -X POST "$BASE/api/v1/auth/login" \
    check**: each thing the app needs is there in order, with **Allowed** or, on
    the one that stops a trip, a button that fixes it, and no trip starts. With
    Location Services off, the button there and at the top of **Settings** is
-   **Try again**, as on **Before you start**. Go back. Tap **Theme**, then
-   **Dark**: the app is dark at once, with **Settings** still open. Put it back
-   to **System**. Tap **Sign out**: "Sign out?" with "The next driver can sign
-   in on this phone." Tap **Sign out** again: the sign-in screen appears with
-   the server as one line, **Server localhost:8081 Change**, the email empty,
-   and the server log has the logout:
+   **Try again**, as on **Before you start**. Go back. Under **During a trip**
+   choose **Always on** and **North up**, and leave them for Check 1, which
+   puts them back. Go back. Tap **Theme**, then **Dark**: the app is dark at
+   once, with **Settings** still open. Put it back to **System**. Tap **Sign
+   out**: "Sign out?" with "The next driver can sign in on this phone." Tap
+   **Sign out** again: the sign-in screen appears with the server as one line,
+   **Server localhost:8081 Change**, the email empty, and the server log has
+   the logout:
 
    ```bash
    grep '"path":"/api/v1/auth/logout"' /tmp/vt-server.log

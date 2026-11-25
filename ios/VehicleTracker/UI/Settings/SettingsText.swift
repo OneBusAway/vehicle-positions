@@ -57,6 +57,14 @@ nonisolated enum SettingsText {
         }
     }
 
+    /// At the end of During a trip's row, or under its title.
+    static func screen(_ choice: ScreenOn) -> String {
+        switch choice {
+        case .charging: String(localized: "Screen on while charging", comment: "Settings, on the During a trip row: when the phone's display stays on.")
+        case .always: String(localized: "Screen always on", comment: "Settings, on the During a trip row: when the phone's display stays on.")
+        }
+    }
+
     static var appSection: String {
         String(localized: "App", comment: "Settings: the heading over the rows about the app itself, such as its language.")
     }

@@ -172,6 +172,21 @@ import VehiclePositionsKit
         #expect(s.settings.theme == .dark)
     }
 
+    /// And what Tracking does during a trip.
+    @Test func signOutKeepsTheTripSettings() async throws {
+        let s = session()
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+        s.settings.screenOn = .always
+        s.settings.mapUp = .north
+        s.settings.vibratesOnProblem = false
+
+        await s.signOut()
+        #expect(s.phase == .signedOut)
+        #expect(s.settings.screenOn == .always)
+        #expect(s.settings.mapUp == .north)
+        #expect(!s.settings.vibratesOnProblem)
+    }
+
     @Test func startFailureReturnsToIdle() async throws {
         api.startError = APIError.status(409, message: "driver already has an active trip")
         let s = session()

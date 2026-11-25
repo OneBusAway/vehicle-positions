@@ -62,8 +62,9 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate, UIGestu
         }
     }
 
-    /// Where the vehicle sits while following, on the phone. Nil on the car,
-    /// which keeps a fixed look-ahead and its own zoom buttons.
+    /// Where the vehicle sits while following and what is up, on the phone.
+    /// Nil on the car, which keeps the way the vehicle goes up, a fixed
+    /// look-ahead and its own zoom buttons.
     var followFraming: FollowFraming? {
         didSet {
             guard followFraming != oldValue else { return }
@@ -83,6 +84,8 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate, UIGestu
             view.accessibilityLabel = TripStatusText.spokenVehicleRow(name: vehicleName, status: nil)
         }
     }
+
+    private var isNorthUp: Bool { followFraming?.up == .north }
 
     private var trip: TripGeometry?
     private var shape: ShapeGeometry?
@@ -234,7 +237,15 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate, UIGestu
             mapView.addAnnotation(vehicle)
             vehiclePlaced = true
         }
-        refreshVehicleView()
+        if isNorthUp {
+            // The vehicle turns and the map does not: as smoothly as the map
+            // would.
+            UIView.animate(withDuration: Self.followDuration, delay: 0, options: [.curveEaseOut, .beginFromCurrentState, .allowUserInteraction]) {
+                self.refreshVehicleView()
+            }
+        } else {
+            refreshVehicleView()
+        }
 
         // Off the route, the matched position shows with a dotted line to it
         // from the vehicle. The route keeps its full colour: that is when the
@@ -349,11 +360,12 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate, UIGestu
         }
     }
 
-    /// Heading-up and flat, centred ahead of the vehicle: by the framing on
-    /// the phone, so the vehicle lands a third of the way up the uncovered
-    /// map, and by a fixed look-ahead on the car.
-    private func followCamera(for adherence: Adherence) -> MKMapCamera {
-        let course = lastCourse
+    /// Flat, with the way the vehicle goes up or north, centred towards the
+    /// top of the screen from the vehicle: by the framing on the phone, so
+    /// the vehicle lands where that says, and by a fixed look-ahead on the
+    /// car.
+    func followCamera(for adherence: Adherence) -> MKMapCamera {
+        let heading = isNorthUp ? 0 : lastCourse
         let here = GeoPoint(adherence.fix.latitude, adherence.fix.longitude)
         var ahead = Self.lookAheadMetres
         if let framing = followFraming, let scale = cameraScale() {
@@ -362,13 +374,13 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate, UIGestu
             // from the scale now.
             ahead = framing.vehicleOffsetFromCentre * scale.metresPerPoint * followDistance / scale.distance
         }
-        let rad = Geo.rad(course)
+        let rad = Geo.rad(heading)
         let centre = GeoPoint(
             here.lat + ahead * cos(rad) / Geo.metresPerDegree,
             here.lon + ahead * sin(rad) / (Geo.metresPerDegree * max(cos(Geo.rad(here.lat)), 1e-6))
         )
         return MKMapCamera(lookingAtCenter: CLLocationCoordinate2D(latitude: centre.lat, longitude: centre.lon),
-                           fromDistance: followDistance, pitch: 0, heading: course)
+                           fromDistance: followDistance, pitch: 0, heading: heading)
     }
 
     /// The camera's distance now and the metres one point covers at it:

@@ -5,8 +5,8 @@ private let groupCorner: CGFloat = 26
 
 /// Settings, opened from the account button on the pickers: whether this
 /// phone can report a trip, who is signed in and Sign out, what the app is
-/// allowed, its language and theme, Help, Share diagnostics and the build. Android's
-/// `SettingsScreen`.
+/// allowed and does during a trip, its language and theme, Help, Share
+/// diagnostics and the build. Android's `SettingsScreen`.
 struct SettingsView: View {
     let access: any LocationAccess
     let openPermissionCheck: () -> Void
@@ -44,6 +44,8 @@ struct SettingsView: View {
                     AccountCard()
                     SettingsGroup(title: SettingsText.phoneSection) {
                         PermissionCheckRow(readiness: readiness, open: openPermissionCheck)
+                        SettingsDivider()
+                        TripSettingsRow()
                     }
                     SettingsGroup(title: SettingsText.appSection) {
                         LanguageSettingsRow()
@@ -246,6 +248,19 @@ private struct PermissionCheckRow: View {
     }
 }
 
+/// What Tracking does during a trip: when the screen stays on, and the page
+/// with the rest.
+private struct TripSettingsRow: View {
+    @Environment(TripSession.self) private var session
+
+    var body: some View {
+        NavigationLink(value: PickerRoute.tripSettings) {
+            SettingsRow(symbol: "location", title: TripSettingsText.title, value: SettingsText.screen(session.settings.screenOn), end: .opens)
+        }
+        .buttonStyle(SettingsRowStyle())
+    }
+}
+
 /// The language the app is shown in. iOS keeps each app's language on the
 /// app's own page in the Settings app (UIPrefersShowingLanguageSettings), so
 /// a tap opens that page.
@@ -364,14 +379,10 @@ private struct SettingsGroup<Rows: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(title)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .accessibilityAddTraits(.isHeader)
-                .padding(EdgeInsets(top: 28, leading: 20, bottom: 8, trailing: 20))
+            SettingsGroupTitle(title: title)
+                .padding(.top, 28)
             VStack(spacing: 0) { rows }
-                .background(Color(.secondarySystemGroupedBackground))
-                .clipShape(.rect(cornerRadius: groupCorner))
+                .settingsCard()
             if let footer {
                 Text(footer)
                     .font(.footnote)
@@ -379,6 +390,27 @@ private struct SettingsGroup<Rows: View>: View {
                     .padding(EdgeInsets(top: 8, leading: 20, bottom: 0, trailing: 20))
             }
         }
+    }
+}
+
+/// A group's title, marked as a heading so VoiceOver's rotor can jump to it.
+struct SettingsGroupTitle: View {
+    let title: String
+
+    var body: some View {
+        Text(title)
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .accessibilityAddTraits(.isHeader)
+            .padding(EdgeInsets(top: 0, leading: 20, bottom: 8, trailing: 20))
+    }
+}
+
+extension View {
+    /// The card a group's rows are on.
+    func settingsCard() -> some View {
+        background(Color(.secondarySystemGroupedBackground))
+            .clipShape(.rect(cornerRadius: groupCorner))
     }
 }
 
@@ -459,7 +491,7 @@ private struct SettingsRow: View {
     }
 }
 
-private struct SettingsRowStyle: ButtonStyle {
+struct SettingsRowStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .foregroundStyle(.primary)

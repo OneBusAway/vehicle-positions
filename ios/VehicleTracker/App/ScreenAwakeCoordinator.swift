@@ -21,19 +21,24 @@ protocol IdleTimer: AnyObject {
 /// Holds the idle timer off while a screen that wants it is up and the phone
 /// is charging (DESIGN-iOS §4.7.7): a phone in a dash mount is never raised,
 /// so raise-to-wake never fires, and a dark screen breaks the glance. The
-/// hold lets go on battery, in Low Power Mode, and when the last lease is
-/// returned.
+/// hold lets go on battery and in Low Power Mode, unless the driver chose
+/// `ScreenOn.always`, and when the last lease is returned.
 ///
 /// One owner with leases, as OneBusAway iOS's `ScreenAwakeCoordinator`: two
 /// screens overlapping can never leave the timer switched off, and a repeat
 /// acquire from the same owner is a no-op rather than a leaked lease. Unlike
 /// OneBusAway's it has no ten-minute failsafe, because a trip runs longer
-/// than that; unplugging is the failsafe.
+/// than that; unplugging is the failsafe, or leaving the screen when the
+/// driver chose always.
 @MainActor @Observable
 final class ScreenAwakeCoordinator {
     @ObservationIgnored private let power: any PowerSource
     @ObservationIgnored private let idleTimer: any IdleTimer
     @ObservationIgnored private var owners: Set<ObjectIdentifier> = []
+    /// When a lease holds the timer off, as the driver chose.
+    @ObservationIgnored var screenOn = ScreenOn.charging {
+        didSet { apply() }
+    }
     /// What the timer was before the hold began, so releasing it cannot
     /// switch off a hold some other part of the app placed.
     @ObservationIgnored private var stateBeforeHold = false
@@ -70,7 +75,7 @@ final class ScreenAwakeCoordinator {
 
     private func apply() {
         let charging = power.batteryState == .charging || power.batteryState == .full
-        let wanted = !owners.isEmpty && charging && !power.isLowPowerModeEnabled
+        let wanted = !owners.isEmpty && (screenOn == .always || (charging && !power.isLowPowerModeEnabled))
         guard wanted != isHolding else { return }
         if wanted {
             stateBeforeHold = idleTimer.isDisabled
