@@ -22,7 +22,8 @@ func databaseAway(err error) bool {
 			strings.HasPrefix(pgErr.Code, "53"), // insufficient resources
 			strings.HasPrefix(pgErr.Code, "57"), // operator intervention
 			strings.HasPrefix(pgErr.Code, "58"), // system error
-			strings.HasPrefix(pgErr.Code, "40"): // rolled back, such as a deadlock
+			strings.HasPrefix(pgErr.Code, "40"), // rolled back, such as a deadlock
+			pgErr.Code == "55P03":               // a lock not had within lock_timeout
 			return true
 		}
 		return false
@@ -34,13 +35,14 @@ func databaseAway(err error) bool {
 		errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF)
 }
 
-// storeErrorStatus is the status for a request the store failed. It is 503 while
-// the database is away: the driver apps keep a report that was answered so and
-// send it later, where they drop one the server can't handle (500), which it
-// would not handle the next time either.
-func storeErrorStatus(err error) int {
+// writeReportFailure answers a report the store failed, with message when the
+// server can't handle it. While the database is away it is a 503: the driver
+// apps keep a report that was answered so and send it later, where they drop one
+// answered 500, which the server would not handle the next time either.
+func writeReportFailure(w http.ResponseWriter, err error, message string) {
 	if databaseAway(err) {
-		return http.StatusServiceUnavailable
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "database unavailable"})
+		return
 	}
-	return http.StatusInternalServerError
+	writeJSON(w, http.StatusInternalServerError, map[string]string{"error": message})
 }

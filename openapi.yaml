@@ -320,6 +320,8 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
           $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/DatabaseAway'
 
   /api/v1/auth/logout:
     post:
@@ -2583,9 +2585,10 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
     DatabaseAway:
       description: |
-        The database can't answer for now, such as while it restarts. Nothing
-        was saved; send the report again later. Any request with a bearer token
-        can be answered so, as its sign-in is checked there.
+        The database can't answer for now, such as while it restarts. Whether
+        anything was saved is not known; send it again later, as a report is
+        stored once. Only the routes reports come in by are answered so: any
+        other is a `500`, and the schedule's `503` means there is no schedule.
       content:
         application/json:
           schema:

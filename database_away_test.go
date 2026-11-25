@@ -34,6 +34,8 @@ func TestDatabaseAway(t *testing.T) {
 		{"a query that took too long", pg("57014"), true},
 		{"an I/O error", pg("58030"), true},
 		{"a deadlock", pg("40P01"), true},
+		{"a lock not had in time", pg("55P03"), true},
+		{"a lock refused for another reason", pg("55006"), false},
 		{"a byte that isn't UTF-8", pg("22021"), false},
 		{"a broken constraint", pg("23505"), false},
 		{"SQL that is wrong", pg("42703"), false},
@@ -66,28 +68,89 @@ func newAwayStore(t *testing.T) *Store {
 func TestReport_DatabaseAway(t *testing.T) {
 	token, err := generateJWT(&User{ID: 1, Email: "driver@test.com", Role: roleDriver}, testSecret, defaultAccessTokenTTL)
 	require.NoError(t, err)
-	report := func() *http.Request {
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/locations", strings.NewReader(
-			`{"vehicle_id":"bus-1","latitude":1,"longitude":2,"timestamp":`+strconv.FormatInt(time.Now().Unix(), 10)+`}`))
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Authorization", "Bearer "+token)
-		return req
-	}
 	tracker := NewTracker(5 * time.Minute)
 	t.Cleanup(tracker.Stop)
-	serve := func(store LocationStore, checker TokenChecker) int {
+	now := strconv.FormatInt(time.Now().Unix(), 10)
+	live := `{"vehicle_id":"bus-1","latitude":1,"longitude":2,"timestamp":` + now + `}`
+	kept := `{"vehicle_id":"bus-1","points":[{"latitude":1,"longitude":2,"timestamp":` + now + `}]}`
+	serve := func(store reportStore, checker TokenChecker, body string) (int, string) {
 		limiter := NewVehicleRateLimiter()
 		defer limiter.Stop()
+		handler := handlePostLocation(store, tracker, limiter)
+		if body == kept {
+			handler = handlePostLocationHistory(store, limiter)
+		}
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/locations", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+token)
 		w := httptest.NewRecorder()
-		requireDriverAPI(testSecret, checker)(handlePostLocation(store, tracker, limiter)).ServeHTTP(w, report())
-		return w.Code
+		requireDriverReports(testSecret, checker)(handler).ServeHTTP(w, req)
+		return w.Code, decodeError(t, w)
 	}
-	away, live := newAwayStore(t), newFakeRevocations()
+	away, checked := newAwayStore(t), newFakeRevocations()
 
-	assert.Equal(t, http.StatusServiceUnavailable, serve(away, away), "the sign-in can't be checked")
-	assert.Equal(t, http.StatusServiceUnavailable, serve(away, live), "the driver can't be authorized")
-	assert.Equal(t, http.StatusServiceUnavailable, serve(saveAway{away}, live), "the report can't be saved")
-	assert.Equal(t, http.StatusInternalServerError, serve(saveFails{}, live), "a report the database refuses")
+	tests := []struct {
+		name    string
+		store   reportStore
+		checker TokenChecker
+		body    string
+		code    int
+		message string
+	}{
+		{"the sign-in can't be checked", away, away, live, http.StatusServiceUnavailable, "database unavailable"},
+		{"the driver can't be authorized", away, checked, live, http.StatusServiceUnavailable, "database unavailable"},
+		{"the report can't be saved", saveAway{away}, checked, live, http.StatusServiceUnavailable, "database unavailable"},
+		{"a report the database refuses", saveFails{}, checked, live, http.StatusInternalServerError, "failed to save location"},
+		{"the sign-in of kept reports can't be checked", away, away, kept, http.StatusServiceUnavailable, "database unavailable"},
+		{"kept reports can't be saved", away, checked, kept, http.StatusServiceUnavailable, "database unavailable"},
+		{"kept reports the database refuses", saveFails{}, checked, kept, http.StatusInternalServerError, "failed to save location history"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			code, message := serve(tt.store, tt.checker, tt.body)
+			assert.Equal(t, tt.code, code)
+			assert.Equal(t, tt.message, message)
+		})
+	}
+}
+
+// reportStore is what both report handlers need.
+type reportStore interface {
+	LocationStore
+	LocationHistorySaver
+}
+
+// TestServer_DatabaseAway: while the database is away, the whole server answers
+// a report 503 and every other route 500, whoever asks. A 503 from the schedule
+// tells the apps that the server has none.
+func TestServer_DatabaseAway(t *testing.T) {
+	away := newAwayStore(t)
+	tracker := NewTracker(5 * time.Minute)
+	t.Cleanup(tracker.Stop)
+	limiter := NewVehicleRateLimiter()
+	t.Cleanup(limiter.Stop)
+	mux := newMux(serverStore{away, &noopStore{}}, tracker, limiter, testSecret, testTTLs, time.Now(), nil, nil, false, false, "",
+		nil, testCatalog(t), nil, newAlertWatcher(&noopStore{}, testAlertSettings), nil, newFeedHealth(time.Now))
+
+	checked := map[int]int{}
+	for _, route := range extractRegisteredRoutes(t) {
+		if !route.auth || route.rider {
+			continue
+		}
+		role := roleDriver
+		if route.admin {
+			role = roleAdmin
+		}
+		w := serveAs(t, mux, role, route.method, samplePath(t, route.path))
+		want := http.StatusInternalServerError
+		if strings.HasPrefix(route.path, "/api/v1/locations") {
+			want = http.StatusServiceUnavailable
+		}
+		assert.Equal(t, want, w.Code, "%s: %s", route, w.Body.String())
+		checked[want]++
+	}
+	assert.Equal(t, 2, checked[http.StatusServiceUnavailable], "both report routes were asked")
+	assert.Greater(t, checked[http.StatusInternalServerError], 20)
 }
 
 // saveAway authorizes every report and saves none, as its database is away.
@@ -101,6 +164,9 @@ type saveFails struct{}
 func (saveFails) AuthorizeLocation(context.Context, *LocationReport) error { return nil }
 func (saveFails) SaveLocation(context.Context, *LocationReport) error {
 	return &pgconn.PgError{Code: "23514"}
+}
+func (saveFails) SaveLocationHistory(context.Context, int64, string, []*LocationReport) (int, error) {
+	return 0, &pgconn.PgError{Code: "23514"}
 }
 
 // TestDatabaseAway_FromPostgres: the errors a real server gives, through the
