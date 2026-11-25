@@ -242,6 +242,12 @@ WHERE user_id = $1
 ORDER BY created_at DESC
 LIMIT 1000;
 
+-- name: ListUserVehicleIDsAmong :many
+-- Which of these vehicles the user is assigned. No LIMIT: the list bounds it.
+SELECT vehicle_id
+FROM user_vehicles
+WHERE user_id = @user_id AND vehicle_id = ANY(@vehicle_ids::TEXT[]);
+
 -- name: ListUsersByVehicle :many
 -- safety bound; not pagination
 SELECT user_id, vehicle_id, created_at

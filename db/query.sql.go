@@ -2022,6 +2022,38 @@ func (q *Queries) ListTrails(ctx context.Context, tripIds []int64) ([]ListTrails
 	return items, nil
 }
 
+const listUserVehicleIDsAmong = `-- name: ListUserVehicleIDsAmong :many
+SELECT vehicle_id
+FROM user_vehicles
+WHERE user_id = $1 AND vehicle_id = ANY($2::TEXT[])
+`
+
+type ListUserVehicleIDsAmongParams struct {
+	UserID     int64
+	VehicleIds []string
+}
+
+// Which of these vehicles the user is assigned. No LIMIT: the list bounds it.
+func (q *Queries) ListUserVehicleIDsAmong(ctx context.Context, arg ListUserVehicleIDsAmongParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, listUserVehicleIDsAmong, arg.UserID, arg.VehicleIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var vehicle_id string
+		if err := rows.Scan(&vehicle_id); err != nil {
+			return nil, err
+		}
+		items = append(items, vehicle_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUsers = `-- name: ListUsers :many
 SELECT id, name, email, role, active, created_at, updated_at, last_seen_at
 FROM users
