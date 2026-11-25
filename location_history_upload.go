@@ -54,7 +54,8 @@ type LocationHistorySaver interface {
 
 // historyUploadResponse counts the batch's points: saved are newly stored,
 // invalid failed validation and were skipped. A point already stored, from an
-// upload retried after its reply was lost, is in neither.
+// upload retried after its reply was lost, is in neither, and nor is one taken
+// outside the driver's own trips on a vehicle they are no longer assigned to.
 type historyUploadResponse struct {
 	Saved   int `json:"saved"`
 	Invalid int `json:"invalid"`
@@ -64,9 +65,11 @@ type historyUploadResponse struct {
 // reach the server. They go to location history, which trip playback and
 // on-time analysis read, and never to the tracker: the GTFS-RT feed is for
 // where vehicles are now, and the server already refuses a realtime report
-// older than maxTimestampSkew. The driver must be assigned to the vehicle. A
-// point that fails validation is skipped rather than costing the rest of the
-// batch, which the phone deletes once it gets 201.
+// older than maxTimestampSkew. The driver must be assigned to the vehicle, or
+// have been running a trip on it when a point was taken: a phone can come back
+// into coverage after dispatch has moved its driver to another. A point that
+// fails validation, or that neither allows, is skipped rather than costing the
+// rest of the batch, which the phone deletes once it gets 201.
 func handlePostLocationHistory(store LocationHistorySaver, rl *VehicleRateLimiter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))

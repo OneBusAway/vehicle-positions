@@ -1,12 +1,14 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"embed"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -206,10 +208,11 @@ func (s *Store) SaveLocation(ctx context.Context, loc *LocationReport) error {
 }
 
 // SaveLocationHistory stores a batch of fixes a phone recorded offline, in one
-// transaction, once it has checked the driver is assigned to the vehicle, and
+// transaction, once it has checked the driver is assigned to the vehicle, or
+// else leaving out those taken outside the trips the driver ran on it, and
 // returns how many it stored: a fix already stored, from an upload retried
-// after its reply was lost, is not stored twice. The assignment's foreign key
-// guarantees the vehicle exists, so none is created.
+// after its reply was lost, is not stored twice. The foreign key of the
+// assignment, or of the trip, guarantees the vehicle exists, so none is created.
 func (s *Store) SaveLocationHistory(ctx context.Context, userID int64, vehicleID string, points []*LocationReport) (int, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -218,10 +221,16 @@ func (s *Store) SaveLocationHistory(ctx context.Context, userID int64, vehicleID
 	defer rollbackTx(tx)
 	qtx := s.queries.WithTx(tx)
 
-	if _, err := qtx.CheckUserVehicleAssignment(ctx, db.CheckUserVehicleAssignmentParams{UserID: userID, VehicleID: vehicleID}); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+	_, err = qtx.CheckUserVehicleAssignment(ctx, db.CheckUserVehicleAssignmentParams{UserID: userID, VehicleID: vehicleID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		points, err = ownTripPoints(ctx, qtx, userID, vehicleID, points)
+		if err != nil {
+			return 0, err
+		}
+		if len(points) == 0 {
 			return 0, ErrNotAssigned
 		}
+	} else if err != nil {
 		return 0, fmt.Errorf("check assignment: %w", err)
 	}
 	saved := 0
@@ -249,6 +258,35 @@ func (s *Store) SaveLocationHistory(ctx context.Context, userID int64, vehicleID
 		return 0, fmt.Errorf("commit tx: %w", err)
 	}
 	return saved, nil
+}
+
+// ownTripPoints is the points taken while the driver ran a trip on the vehicle,
+// give or take maxTimestampSkew, as the phone's clock may differ from this one,
+// which times the trips. They are the driver's to save whoever the vehicle has
+// been assigned to since.
+func ownTripPoints(ctx context.Context, q *db.Queries, userID int64, vehicleID string, points []*LocationReport) ([]*LocationReport, error) {
+	if len(points) == 0 {
+		return nil, nil
+	}
+	first := slices.MinFunc(points, func(a, b *LocationReport) int { return cmp.Compare(a.Timestamp, b.Timestamp) })
+	spans, err := q.ListTripSpans(ctx, db.ListTripSpansParams{
+		UserID: userID, VehicleID: vehicleID,
+		EndedSince: pgtype.Timestamptz{Time: time.Unix(first.Timestamp, 0).Add(-maxTimestampSkew), Valid: true},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list trip spans: %w", err)
+	}
+	own := make([]*LocationReport, 0, len(points))
+	for _, p := range points {
+		at := time.Unix(p.Timestamp, 0)
+		if slices.ContainsFunc(spans, func(s db.ListTripSpansRow) bool {
+			return !at.Before(s.StartTime.Time.Add(-maxTimestampSkew)) &&
+				(!s.EndTime.Valid || !at.After(s.EndTime.Time.Add(maxTimestampSkew)))
+		}) {
+			own = append(own, p)
+		}
+	}
+	return own, nil
 }
 
 // GetRecentLocations retrieves the latest position for each vehicle since the

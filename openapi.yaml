@@ -265,9 +265,12 @@ paths:
         counted in `invalid` rather than refusing the batch. A fix already
         stored (the same vehicle, driver and timestamp), as when an upload is
         retried after its reply was lost, is not stored again and is counted in
-        neither. The driver must be assigned to `vehicle_id`. Uploads are
-        rate-limited per driver (a burst of 3, then one per 5 seconds). Request
-        bodies are capped at 1 MiB.
+        neither. The driver must be assigned to `vehicle_id`, or have been
+        running a trip on it when the fix was taken, give or take 5 minutes. A
+        fix that neither allows is skipped and counted in neither, and a batch of
+        such fixes alone is refused with `403`. Uploads are rate-limited per
+        driver (a burst of 3, then one per 5 seconds). Request bodies are capped
+        at 1 MiB.
       requestBody:
         required: true
         content:
@@ -298,7 +301,9 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
-          description: Caller lacks the driver role, or is not assigned to this vehicle.
+          description: |
+            Caller lacks the driver role, or is not assigned to this vehicle and
+            ran no trip on it when these fixes were taken.
           content:
             application/json:
               schema:
