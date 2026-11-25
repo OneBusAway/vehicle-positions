@@ -1033,6 +1033,43 @@ func TestStore_ImportDrivers_NewAccountsInOppositeOrdersQueue(t *testing.T) {
 	assert.Equal(t, "email already exists", got.outcomes[2].Reason)
 }
 
+// TestStore_ImportDrivers_PastTheListBound: a row listing a vehicle the account
+// has had for longer than 1000 others, the bound of ListVehiclesByUser, changes
+// nothing, as any vehicle it has does.
+func TestStore_ImportDrivers_PastTheListBound(t *testing.T) {
+	store := newImportTestStore(t)
+	ctx := context.Background()
+	ana := addImportUser(t, store, "Ana", "imp-ana@example.org", roleDriver)
+	addImportVehicle(t, store, "imp-old", "Old", true)
+	addImportVehicle(t, store, "imp-new", "New", true)
+	_, err := store.CreateAssignment(asTestAdmin(), ana, "imp-old")
+	require.NoError(t, err)
+	_, err = store.pool.Exec(ctx, `UPDATE user_vehicles SET created_at = NOW() - interval '1 hour' WHERE user_id = $1`, ana)
+	require.NoError(t, err)
+	_, err = store.pool.Exec(ctx, `INSERT INTO vehicles (id, label, agency_tag) SELECT 'imp-many-' || i, '', '' FROM generate_series(1, 1000) i`)
+	require.NoError(t, err)
+	_, err = store.pool.Exec(ctx, `INSERT INTO user_vehicles (user_id, vehicle_id) SELECT $1, 'imp-many-' || i FROM generate_series(1, 1000) i`, ana)
+	require.NoError(t, err)
+	row := func(ids ...string) []driverImportRow {
+		return []driverImportRow{{Line: 2, Email: "imp-ana@example.org", Name: "Ana", VehicleIDs: ids}}
+	}
+
+	plan, err := store.PlanDriverImport(ctx, row("imp-old"))
+	require.NoError(t, err)
+	assert.Equal(t, []importOutcome{{Status: importUnchanged}}, plan)
+	got, err := store.ImportDrivers(asTestAdmin(), newTestPreview(t), row("imp-old"), noPassword)
+	require.NoError(t, err)
+	assert.Equal(t, []importStatus{importUnchanged}, statuses(got))
+
+	// One it has not is still added.
+	plan, err = store.PlanDriverImport(ctx, row("imp-old", "imp-new"))
+	require.NoError(t, err)
+	assert.Equal(t, []importOutcome{{Status: importUpdate, Changes: []string{"adds imp-new"}}}, plan)
+	got, err = store.ImportDrivers(asTestAdmin(), newTestPreview(t), row("imp-old", "imp-new"), noPassword)
+	require.NoError(t, err)
+	assert.Equal(t, []importStatus{importUpdate}, statuses(got))
+}
+
 // queryCounter counts the queries a store runs, by their sqlc name.
 type queryCounter struct {
 	mu     sync.Mutex

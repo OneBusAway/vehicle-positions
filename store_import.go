@@ -250,13 +250,13 @@ func planDrivers(ctx context.Context, q *db.Queries, rows []driverImportRow) ([]
 			outcomes[i] = importOutcome{Status: importError, Reason: "this email belongs to an admin account"}
 			continue
 		default:
-			assigned, err := q.ListVehiclesByUser(ctx, u.ID)
+			assigned, err := q.ListUserVehicleIDsAmong(ctx, db.ListUserVehicleIDsAmongParams{UserID: u.ID, VehicleIds: row.VehicleIDs})
 			if err != nil {
 				return nil, nil, fmt.Errorf("list assignments of user %d: %w", u.ID, err)
 			}
 			p = driverPlan{userID: u.ID, rename: u.Name != row.Name}
 			for _, id := range row.VehicleIDs {
-				if !slices.ContainsFunc(assigned, func(a db.UserVehicle) bool { return a.VehicleID == id }) {
+				if !slices.Contains(assigned, id) {
 					p.assign = append(p.assign, id)
 				}
 			}
