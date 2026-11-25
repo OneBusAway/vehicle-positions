@@ -64,6 +64,12 @@ android {
         )
     }
 
+    bundle {
+        // Google Play would give a phone only the languages in its own settings, and the app's language list
+        // (the Language row, and Settings > Apps > Language) offers every one it has.
+        language { enableSplit = false }
+    }
+
     buildTypes {
         debug {
             // en-XA (accented and longer) and ar-XB (right to left), for finding text strings.xml misses and layouts
