@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentSender
 import android.content.pm.PackageManager
+import android.location.LocationManager
 import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
@@ -28,6 +29,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.location.LocationManagerCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.google.android.gms.common.api.ResolvableApiException
 import com.google.android.gms.location.LocationRequest
@@ -128,7 +130,7 @@ private fun Context.granted(permission: String): Boolean =
     ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
 
 /** What the phone has granted right now. A permission Android does not have yet reads as not granted. */
-private fun grantsOf(context: Context): Grants = Grants(
+internal fun grantsOf(context: Context): Grants = Grants(
     sdk = Build.VERSION.SDK_INT,
     fine = context.granted(Manifest.permission.ACCESS_FINE_LOCATION),
     coarse = context.granted(Manifest.permission.ACCESS_COARSE_LOCATION),
@@ -136,6 +138,10 @@ private fun grantsOf(context: Context): Grants = Grants(
     notifications = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && context.granted(Manifest.permission.POST_NOTIFICATIONS),
     batteryExempt = context.getSystemService(PowerManager::class.java)?.isIgnoringBatteryOptimizations(context.packageName) == true,
 )
+
+/** Whether location is on for the whole phone. Cheap, unlike Play services' check on the way to a trip. */
+internal fun locationServicesOn(context: Context): Boolean =
+    context.getSystemService(LocationManager::class.java)?.let(LocationManagerCompat::isLocationEnabled) == true
 
 /**
  * Runs the sequence in [next] that must pass before a trip can start, launching Android's prompts as the steps reach
@@ -248,7 +254,8 @@ private val LOCATION_PERMISSIONS = arrayOf(Manifest.permission.ACCESS_FINE_LOCAT
 private fun Activity?.showsLocationRationale(): Boolean =
     this != null && LOCATION_PERMISSIONS.any { ActivityCompat.shouldShowRequestPermissionRationale(this, it) }
 
-private fun appDetailsIntent(context: Context) =
+/** The app's own page in the phone's settings. */
+internal fun appDetailsIntent(context: Context) =
     Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
 
 private fun batteryOptimizationIntent(context: Context) =

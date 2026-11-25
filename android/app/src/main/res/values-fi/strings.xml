@@ -143,7 +143,6 @@
 
     <!-- The account menu -->
     <string name="account_menu">Tili</string>
-    <string name="account_version">Versio %1$s</string>
     <string name="account_sign_out">Kirjaudu ulos</string>
     <string name="account_sign_out_title">Kirjaudutaanko ulos?</string>
     <string name="account_sign_out_message">Seuraava kuljettaja voi kirjautua sisään tällä puhelimella.</string>

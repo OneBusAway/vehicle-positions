@@ -142,7 +142,6 @@
 
     <!-- The account menu -->
     <string name="account_menu">계정</string>
-    <string name="account_version">버전 %1$s</string>
     <string name="account_sign_out">로그아웃</string>
     <string name="account_sign_out_title">로그아웃할까요?</string>
     <string name="account_sign_out_message">다음 기사가 이 휴대전화로 로그인할 수 있어요.</string>

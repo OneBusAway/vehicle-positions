@@ -7,6 +7,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.datastore.preferences.core.edit
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -34,14 +35,14 @@ private const val TIMEOUT_MS = HOLD_TIMEOUT_SEC * 1000
 private const val MARIA = "maria@metro.example"
 private val WELCOME_TITLES = listOf(R.string.welcome_riders_title, R.string.welcome_pieces_title, R.string.welcome_habits_title)
 
-/** Help in the app itself: from the account menu and back, and the welcome opened from it, which comes back to Help. */
+/** Help in the app itself: from Settings and back, and the welcome opened from it, which comes back to Help. */
 @RunWith(AndroidJUnit4::class)
 class HelpFlowTest {
     @get:Rule val compose = createEmptyComposeRule()
 
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
-    /** Has no vehicles to give, so the vehicle step stays on screen with its menu. */
+    /** Has no vehicles to give, so the vehicle step stays on screen with its account button. */
     private val server = HoldingServer(held = "/nothing-is-held") { path ->
         when {
             path.endsWith("/api/v1/vehicles") -> "200 OK" to "[]"
@@ -79,8 +80,11 @@ class HelpFlowTest {
 
     private fun waitForTheVehicleStep() = compose.waitUntil(TIMEOUT_MS) {
         compose.onAllNodes(hasContentDescription(string(R.string.account_menu))).fetchSemanticsNodes().isNotEmpty() &&
-            !heading(R.string.help_title)
+            !heading(R.string.settings_title)
     }
+
+    /** Settings alone, with Help that went back to it gone. */
+    private fun waitForSettings() = compose.waitUntil(TIMEOUT_MS) { heading(R.string.settings_title) && !heading(R.string.help_title) }
 
     private fun tap(id: Int) {
         val button = hasText(string(id)) and hasClickAction()
@@ -91,9 +95,16 @@ class HelpFlowTest {
     private fun openHelp() {
         waitForTheVehicleStep()
         compose.onNode(hasContentDescription(string(R.string.account_menu))).performClick()
-        tap(R.string.help_title)
-        waitForHeading(R.string.help_title)
+        waitForSettings()
         // A tap during the slide in does nothing.
+        compose.waitForIdle()
+        openHelpFromSettings()
+    }
+
+    private fun openHelpFromSettings() {
+        val help = hasText(string(R.string.help_title)) and hasClickAction()
+        compose.onNode(help).performScrollTo().performClick()
+        waitForHeading(R.string.help_title)
         compose.waitForIdle()
     }
 
@@ -118,14 +129,18 @@ class HelpFlowTest {
     private fun open(block: () -> Unit) = ActivityScenario.launch(MainActivity::class.java).use { block() }
 
     @Test
-    fun helpOpensFromTheAccountMenu_andItsBackArrowAndBackLeaveIt() {
+    fun helpOpensFromSettings_andTheBackArrowAndBackLeaveEachInTurn() {
         open {
             openHelp()
             compose.onNode(hasContentDescription(string(R.string.setup_navigate_up))).performClick()
-            waitForTheVehicleStep()
+            waitForSettings()
+            compose.waitForIdle()
 
-            openHelp()
+            openHelpFromSettings()
             pressBack()
+            waitForSettings()
+            compose.waitForIdle()
+            compose.onNode(hasContentDescription(string(R.string.setup_navigate_up))).performClick()
             waitForTheVehicleStep()
         }
     }

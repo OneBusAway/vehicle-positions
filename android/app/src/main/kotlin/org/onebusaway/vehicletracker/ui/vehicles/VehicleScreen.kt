@@ -39,7 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.onebusaway.vehicletracker.R
-import org.onebusaway.vehicletracker.ui.account.AccountMenu
+import org.onebusaway.vehicletracker.ui.account.AccountButton
 import org.onebusaway.vehicletracker.ui.components.DelayedSpinner
 import org.onebusaway.vehicletracker.ui.components.EmptyState
 import org.onebusaway.vehicletracker.ui.components.FirstStepHeader
@@ -55,8 +55,7 @@ private val TileGap = 12.dp
 /**
  * [onVehicleSelected] is a tap on a tile. [onOnlyVehicle] is the vehicle of a driver with one assignment, once the
  * assignments load; the caller decides whether to skip ahead with it. [onSessionEnded] is the server having ended the
- * session, [onSignIn] a tap on Sign in once the phone has ended a viewer's, and [onSignedOut] the driver having signed
- * out.
+ * session, and [onSignIn] a tap on Sign in once the phone has ended a viewer's.
  */
 @Composable
 fun VehicleScreen(
@@ -64,7 +63,6 @@ fun VehicleScreen(
     onOnlyVehicle: (String) -> Unit,
     onSessionEnded: () -> Unit,
     onSignIn: () -> Unit,
-    onSignedOut: () -> Unit,
     viewModel: VehicleViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -85,7 +83,7 @@ fun VehicleScreen(
         onRetry = viewModel::retry,
         onSessionEnded = onSessionEnded,
         onSignIn = onSignIn,
-        account = { AccountMenu(onSignedOut) },
+        account = { AccountButton() },
     )
 }
 

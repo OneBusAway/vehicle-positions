@@ -146,7 +146,6 @@
 
     <!-- The account menu -->
     <string name="account_menu">Akoon</string>
-    <string name="account_version">Nooca %1$s</string>
     <string name="account_sign_out">Ka bax</string>
     <string name="account_sign_out_title">Ma ka baxaysaa?</string>
     <string name="account_sign_out_message">Darawalka xiga wuxuu taleefankan ku soo geli karaa.</string>

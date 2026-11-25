@@ -13,6 +13,7 @@ import org.onebusaway.vehicletracker.engine.AdherenceStatus
 import org.onebusaway.vehicletracker.engine.TripFixtures
 import org.onebusaway.vehicletracker.engine.TripFixtures.at
 import org.onebusaway.vehicletracker.engine.TripFixtures.fix
+import org.onebusaway.vehicletracker.ui.components.GroupPlace
 import org.onebusaway.vehicletracker.ui.theme.StatusTone
 import org.onebusaway.vehicletracker.ui.tracking.StatusCardModel
 import org.onebusaway.vehicletracker.ui.tracking.statusCardModel
@@ -103,16 +104,12 @@ class HelpRowsTest {
         assertEquals(
             listOf(
                 "welcome",
-                "language",
                 "section-STATUS",
                 "status-ON_TIME", "status-LATE", "status-EARLY", "status-OFF_SCHEDULE", "status-OFF_ROUTE",
                 "status-WAITING_FOR_GPS", "status-NO_SCHEDULE", "status-REPORTS_WAITING", "status-REPORTS_WONT_SEND",
                 "section-PROBLEMS",
                 "problem-NO_CONNECTION", "problem-NO_GPS", "problem-CLOCK_WRONG", "problem-REPORTS_REFUSED",
                 "problem-SIGNED_OUT", "problem-REPORTS_PAUSED",
-                "section-ABOUT",
-                "about-VERSION", "about-SERVER",
-                "share",
             ),
             helpPage.map { it.key },
         )
@@ -124,6 +121,5 @@ class HelpRowsTest {
         assertEquals(GroupPlace.FIRST, places.first())
         assertEquals(GroupPlace.LAST, places.last())
         assertTrue(places.drop(1).dropLast(1).all { it == GroupPlace.MIDDLE })
-        assertEquals(listOf(GroupPlace.FIRST, GroupPlace.LAST), helpPage.filterIsInstance<HelpItem.About>().map { it.place })
     }
 }

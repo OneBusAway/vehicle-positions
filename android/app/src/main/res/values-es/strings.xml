@@ -144,7 +144,6 @@
 
     <!-- The account menu -->
     <string name="account_menu">Cuenta</string>
-    <string name="account_version">Versión %1$s</string>
     <string name="account_sign_out">Cerrar sesión</string>
     <string name="account_sign_out_title">¿Cerrar sesión?</string>
     <string name="account_sign_out_message">El siguiente conductor puede iniciar sesión en este teléfono.</string>

@@ -3,6 +3,7 @@ package org.onebusaway.vehicletracker.ui
 import android.content.Context
 import android.content.res.Configuration
 import android.graphics.Bitmap
+import android.os.Build
 import android.os.LocaleList
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.material3.Surface
@@ -33,11 +34,12 @@ import org.onebusaway.vehicletracker.engine.AdherenceThresholds
 import org.onebusaway.vehicletracker.engine.GeoPoint
 import org.onebusaway.vehicletracker.engine.TripGeometry
 import org.onebusaway.vehicletracker.engine.TripStop
-import org.onebusaway.vehicletracker.ui.help.HelpAbout
-import org.onebusaway.vehicletracker.ui.help.HelpContent
+import org.onebusaway.vehicletracker.ui.account.AccountUiState
+import org.onebusaway.vehicletracker.ui.help.HelpScreen
 import org.onebusaway.vehicletracker.ui.login.LoginScreenContent
 import org.onebusaway.vehicletracker.ui.login.LoginUiState
 import org.onebusaway.vehicletracker.ui.permissions.ChecklistRow
+import org.onebusaway.vehicletracker.ui.permissions.Grants
 import org.onebusaway.vehicletracker.ui.permissions.PermissionRow
 import org.onebusaway.vehicletracker.ui.permissions.PreflightContent
 import org.onebusaway.vehicletracker.ui.permissions.RowState
@@ -58,6 +60,9 @@ import org.onebusaway.vehicletracker.ui.runs.RunsScreenContent
 import org.onebusaway.vehicletracker.ui.runs.RunsUiState
 import org.onebusaway.vehicletracker.ui.runs.TripRun
 import org.onebusaway.vehicletracker.ui.runs.runBoardTipText
+import org.onebusaway.vehicletracker.ui.settings.PhoneAccess
+import org.onebusaway.vehicletracker.ui.settings.SettingsContent
+import org.onebusaway.vehicletracker.ui.settings.readiness
 import org.onebusaway.vehicletracker.ui.theme.AppTheme
 import org.onebusaway.vehicletracker.ui.tracking.TrackingScreenContent
 import org.onebusaway.vehicletracker.ui.tracking.TrackingUiState
@@ -243,7 +248,18 @@ class PseudolocaleScreensTest(private val tag: String) {
 
     @Test
     fun help() = check("help", R.string.help_title) {
-        HelpContent(HelpAbout("0.1.0 (1)", "tracker.example.org"), {}, {}, {})
+        HelpScreen({}, {})
+    }
+
+    @Test
+    fun settings() = check("settings", R.string.settings_title) {
+        val grants = Grants(Build.VERSION.SDK_INT, fine = true, coarse = true, background = true, notifications = true, batteryExempt = false)
+        SettingsContent(
+            readiness = readiness(PhoneAccess(grants, locationServicesOn = true), waiting = null),
+            account = AccountUiState("driver@example.com", "tracker.example.org"),
+            version = "0.1.0 (1)",
+            onBack = {}, onOpenPhoneSettings = {}, onSignOut = {}, onSignedOut = {}, onHelp = {}, onShare = {},
+        )
     }
 
     @Test

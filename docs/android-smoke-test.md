@@ -263,12 +263,13 @@ OTHER_REFRESH=$(curl -s -X POST "$BASE/api/v1/auth/login" \
 
 1. On **Choose a run**, tap **Account** (the person at the top right).
 
-   **Expected outcome:** the menu shows `driver@example.com`, then the server
-   (`10.0.2.2:8081` on an emulator) and `Version 0.1.0 (1)` in grey, then
-   **Sign out**. Tap **Sign out**: "Sign out?" with "The next driver can sign
-   in on this phone." Tap **Sign out** again: **Sign in** opens with the server
-   as one line and the email empty. Back closes the app. The server log has
-   the logout:
+   **Expected outcome:** **Settings** says whether the phone can report a trip
+   (**Ready to report** once Check 1 has granted location), then
+   `driver@example.com` and the server (`10.0.2.2:8081` on an emulator) beside
+   **Sign out**. At the end is **Version** `0.1.0 (1)`. Tap **Sign out**: "Sign
+   out?" with "The next driver can sign in on this phone." Tap **Sign out**
+   again: **Sign in** opens with the server as one line and the email empty.
+   Back closes the app. The server log has the logout:
 
    ```bash
    grep '"path":"/api/v1/auth/logout"' /tmp/vt-server.log
@@ -279,7 +280,7 @@ OTHER_REFRESH=$(curl -s -X POST "$BASE/api/v1/auth/login" \
 
    **Expected outcome:** **Choose your vehicle** says **No vehicles are
    assigned to you** and **Ask your dispatcher to assign one, then check
-   again.** with a **Check again** button, and the account menu at the top
+   again.** with a **Check again** button, and the account button at the top
    right. The logout deleted every refresh token the first driver had, so the
    other phone's is refused:
 
@@ -289,16 +290,17 @@ OTHER_REFRESH=$(curl -s -X POST "$BASE/api/v1/auth/login" \
    # 401
    ```
 
-   Sign out from the account menu on **Choose your vehicle**.
+   Tap the account button on **Choose your vehicle**, then **Sign out** in
+   **Settings**.
 
 3. Sign in as `driver@example.com` again. That driver has one vehicle.
 
    **Expected outcome:** the app goes straight to **Choose a route**, with the
-   `bus-1` chip and no Back, and the account menu is there too, so a driver
+   `bus-1` chip and no Back, and the account button is there too, so a driver
    with one vehicle can always sign out. Tap **1 Straight** and carry on with
    Check 1 from step 4.
 
-Tracking and **Resume your trip?** have no account menu: a driver ends the
+Tracking and **Resume your trip?** have no account button: a driver ends the
 trip first, then signs out.
 
 ### Check 1c: A setup link fills in the server

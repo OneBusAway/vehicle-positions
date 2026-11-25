@@ -87,8 +87,6 @@ import org.onebusaway.vehicletracker.engine.GeoPoint
 import org.onebusaway.vehicletracker.engine.TripGeometry
 import org.onebusaway.vehicletracker.engine.TripStop
 import org.onebusaway.vehicletracker.service.LocationFix
-import org.onebusaway.vehicletracker.ui.account.AccountMenuContent
-import org.onebusaway.vehicletracker.ui.account.AccountUiState
 import org.onebusaway.vehicletracker.ui.components.SPINNER_DELAY_MS
 import org.onebusaway.vehicletracker.ui.login.LoginError
 import org.onebusaway.vehicletracker.ui.login.LoginField
@@ -1674,126 +1672,10 @@ class ScreenFlowTest {
         compose.onNode(hasText("4317")).assertIsDisplayed().assert(hasClickAction().not())
     }
 
-    // --- The account menu on the picker steps ---
-
-    private val account = AccountUiState(email = "d@example.com", server = "tracker.example.com")
-    private val accountButton get() = compose.onNodeWithContentDescription(getString(R.string.account_menu))
-
-    private class AccountCalls {
-        var signOuts = 0
-        var signedOut = 0
-    }
-
-    private fun showAccount(state: () -> AccountUiState, enabled: Boolean = true): AccountCalls {
-        val calls = AccountCalls()
-        compose.setContent {
-            AccountMenuContent(state(), "0.1.0 (1)", enabled, onSignOut = { calls.signOuts++ }, onSignedOut = { calls.signedOut++ })
-        }
-        return calls
-    }
-
-    /** Opens the menu and asks to sign out, which puts the question up. */
-    private fun askToSignOut() {
-        accountButton.performClick()
-        compose.onNodeWithText(getString(R.string.account_sign_out)).performClick()
-    }
+    // --- The account button on the picker steps ---
 
     @Test
-    fun accountMenu_saysWhoIsSignedInWhereAndWhichBuild() {
-        showAccount({ account })
-
-        accountButton.performClick()
-
-        compose.onNodeWithText("d@example.com").assertIsDisplayed()
-        compose.onNodeWithText("tracker.example.com").assertIsDisplayed()
-        compose.onNodeWithText(getString(R.string.account_version, "0.1.0 (1)")).assertIsDisplayed()
-        compose.onNodeWithText(getString(R.string.account_sign_out)).assertIsDisplayed()
-    }
-
-    @Test
-    fun accountMenu_leavesOutAnEmailItDoesNotHave() {
-        showAccount({ account.copy(email = null) })
-
-        accountButton.performClick()
-
-        compose.onNodeWithText("tracker.example.com").assertIsDisplayed()
-        compose.onNodeWithText("d@example.com").assertDoesNotExist()
-    }
-
-    @Test
-    fun accountMenu_asksFirstAndCancelSignsNobodyOut() {
-        val calls = showAccount({ account })
-
-        askToSignOut()
-        compose.onNodeWithText(getString(R.string.account_sign_out_title)).assertIsDisplayed()
-        compose.onNodeWithText(getString(R.string.account_sign_out_message)).assertIsDisplayed()
-        inDialog(getString(R.string.account_sign_out_cancel)).performClick()
-
-        compose.onNodeWithText(getString(R.string.account_sign_out_title)).assertDoesNotExist()
-        assertEquals(0, calls.signOuts)
-    }
-
-    @Test
-    fun accountMenu_signsOutOnceConfirmed() {
-        val calls = showAccount({ account })
-
-        askToSignOut()
-        inDialog(getString(R.string.account_sign_out)).performClick()
-
-        assertEquals(1, calls.signOuts)
-    }
-
-    @Test
-    fun accountMenu_holdsTheQuestionUpWhileSigningOut() {
-        var state by mutableStateOf(account)
-        showAccount({ state })
-        askToSignOut()
-
-        state = state.copy(signingOut = true)
-        compose.waitForIdle()
-
-        val spinner = SemanticsMatcher.expectValue(SemanticsProperties.ProgressBarRangeInfo, ProgressBarRangeInfo.Indeterminate)
-        compose.onNode(spinner and hasAnyAncestor(isDialog()), useUnmergedTree = true).assertExists()
-        inDialog(getString(R.string.account_sign_out)).assertIsNotEnabled()
-        inDialog(getString(R.string.account_sign_out_cancel)).assertIsNotEnabled()
-        InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
-        compose.waitForIdle()
-        compose.onNodeWithText(getString(R.string.account_sign_out_title)).assertIsDisplayed()
-    }
-
-    @Test
-    fun accountMenu_keepsTheQuestionThroughARotation() {
-        val restoration = StateRestorationTester(compose)
-        restoration.setContent { AccountMenuContent(account, "0.1.0 (1)", enabled = true, onSignOut = {}, onSignedOut = {}) }
-        askToSignOut()
-
-        restoration.emulateSavedInstanceStateRestore()
-
-        compose.onNodeWithText(getString(R.string.account_sign_out_title)).assertIsDisplayed()
-    }
-
-    @Test
-    fun accountMenu_waitsWhileATripStarts() {
-        showAccount({ account }, enabled = false)
-
-        accountButton.assertIsNotEnabled()
-    }
-
-    @Test
-    fun accountMenu_reportsTheSignOutOnce() {
-        var state by mutableStateOf(account.copy(signingOut = true))
-        val calls = showAccount({ state })
-
-        state = state.copy(signedOut = true)
-        compose.waitForIdle()
-        state = state.copy(email = null)
-        compose.waitForIdle()
-
-        assertEquals(1, calls.signedOut)
-    }
-
-    @Test
-    fun setupSteps_eachDrawsTheAccountMenuAndTheBusTitleStaysLevel() {
+    fun setupSteps_eachDrawsTheAccountButtonAndTheBusTitleStaysLevel() {
         val slot = "account slot"
         var step by mutableStateOf("vehicles")
         compose.setContent {

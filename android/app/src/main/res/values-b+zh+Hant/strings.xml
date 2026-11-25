@@ -142,7 +142,6 @@
 
     <!-- The account menu -->
     <string name="account_menu">帳號</string>
-    <string name="account_version">版本 %1$s</string>
     <string name="account_sign_out">登出</string>
     <string name="account_sign_out_title">要登出嗎？</string>
     <string name="account_sign_out_message">下一位駕駛可以在這支手機上登入。</string>

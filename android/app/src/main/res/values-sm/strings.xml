@@ -141,7 +141,6 @@
 
     <!-- The account menu -->
     <string name="account_menu">Akauni</string>
-    <string name="account_version">Lomiga %1$s</string>
     <string name="account_sign_out">Saini i fafo</string>
     <string name="account_sign_out_title">Saini i fafo?</string>
     <string name="account_sign_out_message">E mafai e le isi ʻavetaʻavale ona saini i totonu i lenei telefoni.</string>

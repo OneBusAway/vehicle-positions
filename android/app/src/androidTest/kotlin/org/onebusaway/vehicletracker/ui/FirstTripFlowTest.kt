@@ -229,7 +229,6 @@ class FirstTripFlowTest {
                             onChangeBus = {},
                             onChooseAnotherRoute = {},
                             onSessionEnded = {},
-                            onSignedOut = {},
                             viewModel = viewModel(factory = runsFactory),
                             tipViewModel = viewModel { RunBoardTipViewModel(tips) },
                         )

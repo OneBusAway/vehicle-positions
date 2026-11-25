@@ -1,7 +1,6 @@
 package org.onebusaway.vehicletracker.ui
 
 import androidx.activity.BackEventCompat
-import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isHeading
@@ -35,16 +34,16 @@ private const val TIMEOUT_MS = HOLD_TIMEOUT_SEC * 1000
 private const val MARIA = "maria@metro.example"
 
 /**
- * Help opened from the vehicle step before the driver's one assignment has landed. The step skips itself for a driver
- * with one vehicle, and that skip must not close Help: it waits until the driver is back on the step.
+ * Settings opened from the vehicle step before the driver's one assignment has landed. The step skips itself for a driver
+ * with one vehicle, and that skip must not close Settings: it waits until the driver is back on the step.
  */
 @RunWith(AndroidJUnit4::class)
-class HelpOverOneVehicleTest {
+class SettingsOverOneVehicleTest {
     @get:Rule val compose = createEmptyComposeRule()
 
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
-    /** Holds the assignments until Help is open. The driver has one vehicle, and no routes to choose from. */
+    /** Holds the assignments until Settings is open. The driver has one vehicle, and no routes to choose from. */
     private val server = HoldingServer(held = "/api/v1/vehicles") { path ->
         when {
             path.endsWith("/api/v1/vehicles") -> "200 OK" to """[{"id":"4317","label":"4317"}]"""
@@ -82,22 +81,21 @@ class HelpOverOneVehicleTest {
     private val onTheRouteStep get() = shows(R.string.routes_title)
     private val theOneVehicleIsIn get() = compose.onAllNodes(hasText("4317")).fetchSemanticsNodes().isNotEmpty()
 
-    /** Opens Help from the vehicle step while it is still asking for the assignments, then lets them land. */
-    private fun openHelpBeforeTheAssignmentsLand() {
+    /** Opens Settings from the vehicle step while it is still asking for the assignments, then lets them land. */
+    private fun openSettingsBeforeTheAssignmentsLand() {
         // Waited for through the rule, which only draws the app while the test waits on it.
         compose.waitUntil(TIMEOUT_MS) { server.heldArrived.count == 0L }
         val account = hasContentDescription(string(R.string.account_menu))
         compose.waitUntil(TIMEOUT_MS) { compose.onAllNodes(account).fetchSemanticsNodes().isNotEmpty() }
         compose.waitForIdle()
         compose.onNode(account).performClick()
-        compose.onNode(hasText(string(R.string.help_title)) and hasClickAction()).performClick()
-        compose.waitUntil(TIMEOUT_MS) { shows(R.string.help_title, heading = true) }
+        compose.waitUntil(TIMEOUT_MS) { shows(R.string.settings_title, heading = true) }
         compose.waitForIdle()
         server.release()
     }
 
     /**
-     * Starts a back gesture over Help, which brings the vehicle step back underneath it, and waits until the step has
+     * Starts a back gesture over Settings, which brings the vehicle step back underneath it, and waits until the step has
      * its one vehicle, or has skipped past it.
      */
     private fun startTheBackGesture(scenario: ActivityScenario<MainActivity>) {
@@ -111,16 +109,16 @@ class HelpOverOneVehicleTest {
     }
 
     @Test
-    fun theOneVehicleLandingWhileHelpIsOpen_doesNotCloseHelp() {
+    fun theOneVehicleLandingWhileSettingsIsOpen_doesNotCloseSettings() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-            openHelpBeforeTheAssignmentsLand()
+            openSettingsBeforeTheAssignmentsLand()
             startTheBackGesture(scenario)
 
-            assertFalse("the skip went ahead under Help", onTheRouteStep)
+            assertFalse("the skip went ahead under Settings", onTheRouteStep)
             scenario.onActivity { it.onBackPressedDispatcher.dispatchOnBackCancelled() }
             compose.waitForIdle()
 
-            assertTrue("Help is still open", shows(R.string.help_title, heading = true))
+            assertTrue("Settings is still open", shows(R.string.settings_title, heading = true))
             assertFalse(onTheRouteStep)
         }
     }
@@ -128,13 +126,13 @@ class HelpOverOneVehicleTest {
     @Test
     fun backOnTheVehicleStep_theSkipThatWaitedGoesAhead() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-            openHelpBeforeTheAssignmentsLand()
+            openSettingsBeforeTheAssignmentsLand()
             startTheBackGesture(scenario)
 
             scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
 
             compose.waitUntil(TIMEOUT_MS) { onTheRouteStep }
-            assertFalse("Help closed", shows(R.string.help_title, heading = true))
+            assertFalse("Settings closed", shows(R.string.settings_title, heading = true))
         }
     }
 }

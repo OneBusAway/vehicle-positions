@@ -200,7 +200,8 @@ open that directory in Android Studio). It's a Kotlin/Jetpack Compose app
 (min SDK 26 / target SDK 36) that drivers use to log in, select their
 vehicle and route, and report their location to the server for the duration
 of a trip. A new driver gets a three-screen welcome after the first sign-in and
-two tips on the real screens, and Help in the account menu explains each status.
+two tips on the real screens. The account button opens Settings, which says whether
+the phone can report a trip, and Help there explains each status.
 
 Build the debug APK:
 

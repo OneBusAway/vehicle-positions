@@ -146,7 +146,6 @@
 
     <!-- The account menu -->
     <string name="account_menu">Compte</string>
-    <string name="account_version">Version %1$s</string>
     <string name="account_sign_out">Se déconnecter</string>
     <string name="account_sign_out_title">Se déconnecter ?</string>
     <string name="account_sign_out_message">Le chauffeur suivant pourra se connecter sur ce téléphone.</string>
