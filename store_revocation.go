@@ -23,6 +23,11 @@ type TokenChecker interface {
 	IsUserActiveInRole(ctx context.Context, userID int64, role string, issuedAt time.Time) (bool, error)
 }
 
+// RevocationPruneStore is the store behavior needed to age revocations out.
+type RevocationPruneStore interface {
+	PruneExpiredRevocations(ctx context.Context, cutoff time.Time) (int64, error)
+}
+
 // RevokeToken adds a jti to the revocation list. It is idempotent, so logging
 // out twice with the same token succeeds both times. The sign-out of an
 // account that may use the admin UI is recorded in the audit log in the same
@@ -35,10 +40,8 @@ type TokenChecker interface {
 // row's job is to block a jti until it expires, and that job does not end
 // when the account does.
 //
-// expires_at is recorded so revocation rows can be aged out, but nothing
-// deletes them yet: this table grows one row per logout. A periodic cleanup
-// job (DELETE FROM revoked_tokens WHERE expires_at < NOW()) is needed as a
-// follow-up, and is the only thing that should ever remove a row.
+// expires_at is recorded so revocation rows can be aged out, which
+// PruneExpiredRevocations does. Nothing else should ever remove a row.
 func (s *Store) RevokeToken(ctx context.Context, jti string, userID int64, expiresAt time.Time) error {
 	return s.inSessionTx(ctx, func(q *db.Queries) error {
 		added, err := q.RevokeToken(ctx, db.RevokeTokenParams{
@@ -65,8 +68,19 @@ func (s *Store) IsTokenRevoked(ctx context.Context, jti string) (bool, error) {
 	return revoked, nil
 }
 
+// PruneExpiredRevocations deletes every revocation of a token that expired
+// before cutoff and returns the number of rows removed.
+func (s *Store) PruneExpiredRevocations(ctx context.Context, cutoff time.Time) (int64, error) {
+	rows, err := s.queries.DeleteExpiredRevocations(ctx, pgtype.Timestamptz{Time: cutoff, Valid: true})
+	if err != nil {
+		return 0, fmt.Errorf("prune expired revocations: %w", err)
+	}
+	return rows, nil
+}
+
 var _ TokenRevoker = (*Store)(nil)
 var _ TokenChecker = (*Store)(nil)
+var _ RevocationPruneStore = (*Store)(nil)
 
 // IsUserActiveInRole reports whether the user exists, is active, still holds
 // role, and has had no deactivation or role change since issuedAt. A deleted

@@ -620,8 +620,9 @@ Every staff token carries a `jti`, and a staff token without one is rejected
 with `401`, since it could never be revoked. Rider tokens carry no `jti` and
 are accepted; there is no rider sign-out to revoke them through yet.
 
-Revocation rows are never deleted — the table grows one row per logout. A
-periodic cleanup job keyed on `expires_at` is a planned follow-up.
+Each logout adds a row to `revoked_tokens`. A row is deleted an hour after its
+token expired, when that token is refused anyway, by the pass that deletes
+expired refresh tokens (`REFRESH_TOKEN_PRUNE_INTERVAL`).
 
 **`POST /api/v1/auth/refresh` — renewable access tokens**
 
@@ -727,8 +728,7 @@ Every login and every refresh adds a row to `refresh_tokens`. Rows past their
 the table holds the tokens issued within the last `REFRESH_TOKEN_TTL`, plus at
 most one interval's worth that have since expired. Consumed tokens are kept
 until they expire, so a replay before then is still recognised as reuse rather
-than as an unknown token. The same cleanup for `revoked_tokens` is still a
-planned follow-up.
+than as an unknown token.
 
 **Technology Stack:**
 

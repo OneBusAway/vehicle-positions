@@ -529,6 +529,11 @@ ON CONFLICT (jti) DO NOTHING;
 -- name: IsTokenRevoked :one
 SELECT EXISTS(SELECT 1 FROM revoked_tokens WHERE jti = $1);
 
+-- name: DeleteExpiredRevocations :execrows
+-- idx_revoked_tokens_expires_at serves it. The caller's cutoff is a while after
+-- the tokens expired (revocationGrace).
+DELETE FROM revoked_tokens WHERE expires_at < sqlc.arg(cutoff);
+
 -- name: CreateRefreshToken :exec
 INSERT INTO refresh_tokens (token_hash, user_id, expires_at)
 VALUES ($1, $2, $3);

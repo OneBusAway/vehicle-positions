@@ -370,3 +370,78 @@ func TestStore_SessionsValidAfter(t *testing.T) {
 	require.NotNil(t, promotedAt)
 	assert.True(t, promotedAt.After(*deactivatedAt), "a role change ends the tokens issued before it")
 }
+
+// TestStore_PruneExpiredRevocations: only the revocations whose token expired
+// before the cutoff go, whoever signed out, and whether or not the account is
+// still there.
+func TestStore_PruneExpiredRevocations(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	_, err := store.pool.Exec(ctx, "DELETE FROM revoked_tokens")
+	require.NoError(t, err)
+	userID, deletedID := insertRevocationTestUser(t, store), insertRevocationTestUser(t, store)
+
+	// Postgres keeps microseconds, so a cutoff with more would fall after the row
+	// that is meant to be at it.
+	cutoff := time.Now().Truncate(time.Microsecond)
+	revoke := func(id int64, expiresAt time.Time) string {
+		t.Helper()
+		jti := uniqueJTI(t)
+		require.NoError(t, store.RevokeToken(ctx, jti, id, expiresAt))
+		return jti
+	}
+	longPast, before := revoke(userID, cutoff.Add(-30*24*time.Hour)), revoke(userID, cutoff.Add(-time.Microsecond))
+	at, after := revoke(userID, cutoff), revoke(userID, cutoff.Add(time.Microsecond))
+	orphan, liveOrphan := revoke(deletedID, cutoff.Add(-time.Hour)), revoke(deletedID, cutoff.Add(time.Hour))
+	_, err = store.pool.Exec(ctx, "DELETE FROM users WHERE id = $1", deletedID)
+	require.NoError(t, err)
+
+	deleted, err := store.PruneExpiredRevocations(ctx, cutoff)
+	require.NoError(t, err)
+	assert.Equal(t, int64(3), deleted)
+	for _, jti := range []string{longPast, before, orphan} {
+		assert.Zero(t, countRevocationRows(t, store, jti))
+	}
+	for _, jti := range []string{at, after, liveOrphan} {
+		revoked, err := store.IsTokenRevoked(ctx, jti)
+		require.NoError(t, err)
+		assert.True(t, revoked, "a revocation that may still be needed")
+	}
+
+	deleted, err = store.PruneExpiredRevocations(ctx, cutoff)
+	require.NoError(t, err)
+	assert.Zero(t, deleted, "nothing left to delete is not an error")
+}
+
+// TestTokenPruner_AgainstTheDatabase runs a pass as the server does: it deletes
+// the refresh tokens that expired, and the revocations of tokens that expired a
+// good while ago, not of one that just did.
+func TestTokenPruner_AgainstTheDatabase(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	clearRefreshTokens(t, store)
+	userID := insertRevocationTestUser(t, store)
+	now := time.Now()
+	refresh := func(expiresAt time.Time) string {
+		t.Helper()
+		_, hash := newStoredRefreshToken(t, store, userID, expiresAt)
+		return hash
+	}
+	revoke := func(expiresAt time.Time) string {
+		t.Helper()
+		jti := uniqueJTI(t)
+		require.NoError(t, store.RevokeToken(ctx, jti, userID, expiresAt))
+		return jti
+	}
+	expiredRefresh, liveRefresh := refresh(now.Add(-time.Minute)), refresh(now.Add(time.Hour))
+	longExpired, justExpired, live := revoke(now.Add(-2*time.Hour)), revoke(now.Add(-30*time.Minute)), revoke(now.Add(time.Minute))
+
+	pruner := newUnstartedTokenPruner(store, time.Hour)
+	pruner.prune(pruner.ctx)
+
+	assert.Zero(t, countRefreshRows(t, store, expiredRefresh))
+	assert.Equal(t, 1, countRefreshRows(t, store, liveRefresh))
+	assert.Zero(t, countRevocationRows(t, store, longExpired))
+	assert.Equal(t, 1, countRevocationRows(t, store, justExpired))
+	assert.Equal(t, 1, countRevocationRows(t, store, live))
+}
