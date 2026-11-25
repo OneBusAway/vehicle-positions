@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -87,5 +88,65 @@ func TestVehicleText_HeldToItsLengthEverywhere(t *testing.T) {
 			assert.NoError(t, req.validate())
 			assert.Empty(t, views[0].Reason)
 		})
+	}
+}
+
+// TestVehicleID_OnlyDotsIsRefusedEverywhere: the API, the new vehicle form and
+// the CSV import refuse an id a path can't hold, and take the ids nearest it.
+func TestVehicleID_OnlyDotsIsRefusedEverywhere(t *testing.T) {
+	const problem = "vehicle id must not be only dots"
+	tests := []struct {
+		id      string
+		refused bool
+	}{
+		{".", true},
+		{"..", true},
+		{"...", false},
+		{".bus", false},
+		{"bus.", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.id, func(t *testing.T) {
+			ui := newTestAdminUI(t)
+			store := newFakeVehicleStore()
+			wireFakeVehicleStore(ui, store)
+			mux := http.NewServeMux()
+			registerAdminUI(mux, ui)
+			form := postAdminForm(t, mux, "/admin/vehicles", url.Values{"id": {tt.id}}.Encode())
+			_, views := vehicleRows([]importRecord{{Line: 2, Cells: map[string]string{"id": tt.id}}})
+			require.Len(t, views, 1)
+			err := (&upsertVehicleRequest{ID: tt.id}).validate()
+
+			if tt.refused {
+				assert.EqualError(t, err, problem)
+				assert.Equal(t, http.StatusUnprocessableEntity, form.Code)
+				assert.Contains(t, form.Body.String(), problem)
+				assert.Empty(t, store.vehicles)
+				assert.Equal(t, problem, views[0].Reason)
+				return
+			}
+			assert.NoError(t, err)
+			assert.Equal(t, http.StatusSeeOther, form.Code)
+			assert.Contains(t, store.vehicles, tt.id)
+			assert.Empty(t, views[0].Reason)
+		})
+	}
+}
+
+// TestVehicleID_OnlyDotsCanStillBeDeactivated: a vehicle saved with such an id
+// before can still be deactivated, through the API by a client that sends the
+// dots escaped.
+func TestVehicleID_OnlyDotsCanStillBeDeactivated(t *testing.T) {
+	store := newMockVehicleStore()
+	tracker := NewTracker(5 * time.Minute)
+	t.Cleanup(tracker.Stop)
+	mux := http.NewServeMux()
+	mux.Handle("DELETE /api/v1/admin/vehicles/{id}", handleDeactivateVehicle(store, tracker))
+	for id, path := range map[string]string{".": "%2e", "..": "%2e%2e"} {
+		store.vehicles[id] = &VehicleResponse{ID: id, Active: true}
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, httptest.NewRequest(http.MethodDelete, "/api/v1/admin/vehicles/"+path, nil))
+		assert.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
+		assert.False(t, store.vehicles[id].Active)
 	}
 }
