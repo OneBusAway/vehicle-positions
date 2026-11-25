@@ -308,16 +308,22 @@ func (ui *adminUI) loginSubmit(w http.ResponseWriter, r *http.Request) {
 		ui.renderLogin(w, http.StatusForbidden, "Admin access required.", email, next)
 		return
 	}
-	token, err := generateJWT(user, ui.jwtSecret, sessionLifetime)
+	// Before the cookie, so a session is never handed out without its row in
+	// the audit log, nor to an account that changed since it was read.
+	signedInAt, err := ui.signIns.RecordSignIn(withSessionActor(r, user, auditViaAdmin, ui.cfg.trustProxy), user)
+	if errors.Is(err, ErrAccountChangedMeanwhile) {
+		ui.failedSignIns.NoteFailedSignIn(user, clientIP(r, ui.cfg.trustProxy), auditViaAdmin)
+		ui.renderLogin(w, http.StatusUnauthorized, "Invalid email or password.", email, next)
+		return
+	}
 	if err != nil {
-		slog.Error("admin login: token generation failed", "error", err)
+		slog.Error("admin login: failed to record the sign-in in the audit log", "sub", user.ID, "error", err)
 		ui.renderLogin(w, http.StatusInternalServerError, "Something went wrong. Try again.", email, next)
 		return
 	}
-	// Before the cookie, so a session is never handed out without its row in
-	// the audit log.
-	if err := ui.signIns.RecordSignIn(withSessionActor(r, user, auditViaAdmin, ui.cfg.trustProxy)); err != nil {
-		slog.Error("admin login: failed to record the sign-in in the audit log", "sub", user.ID, "error", err)
+	token, err := generateJWTIssuedAt(user, ui.jwtSecret, sessionLifetime, signedInAt)
+	if err != nil {
+		slog.Error("admin login: token generation failed", "error", err)
 		ui.renderLogin(w, http.StatusInternalServerError, "Something went wrong. Try again.", email, next)
 		return
 	}

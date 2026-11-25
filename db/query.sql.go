@@ -1087,6 +1087,24 @@ func (q *Queries) GetRider(ctx context.Context, id string) (Rider, error) {
 	return i, err
 }
 
+const getSignInForUpdate = `-- name: GetSignInForUpdate :one
+SELECT password_hash, active FROM users WHERE id = $1 FOR NO KEY UPDATE
+`
+
+type GetSignInForUpdateRow struct {
+	PasswordHash string
+	Active       bool
+}
+
+// What a sign-in checked, read under GetUserForUpdate's lock, which waits for
+// every change that ends the account's sign-ins and holds each of them up.
+func (q *Queries) GetSignInForUpdate(ctx context.Context, id int64) (GetSignInForUpdateRow, error) {
+	row := q.db.QueryRow(ctx, getSignInForUpdate, id)
+	var i GetSignInForUpdateRow
+	err := row.Scan(&i.PasswordHash, &i.Active)
+	return i, err
+}
+
 const getTripSummary = `-- name: GetTripSummary :one
 SELECT t.id, t.vehicle_id, v.label AS vehicle_label, t.user_id, u.name AS driver_name,
        t.route_id, t.gtfs_trip_id, t.start_time, t.end_time, t.status
@@ -2331,8 +2349,8 @@ SELECT id FROM users WHERE id = $1 FOR UPDATE
 // Serializes rotation and revocation of one user's refresh tokens. Both take
 // this before reading or writing refresh_tokens, so a revocation cannot run
 // while a rotation is mid-transaction. The users row is the mutex because the
-// row a revoker has to see, the rotation's replacement, does not exist yet.
-// Login does not take it.
+// row a revoker has to see, the rotation's replacement, does not exist yet. A
+// sign-in takes GetSignInForUpdate's, which waits for this one.
 func (q *Queries) LockUser(ctx context.Context, id int64) (int64, error) {
 	row := q.db.QueryRow(ctx, lockUser, id)
 	var id_2 int64
@@ -2540,7 +2558,7 @@ func (q *Queries) SetRiderTier(ctx context.Context, arg SetRiderTierParams) erro
 const setUserActive = `-- name: SetUserActive :execrows
 UPDATE users
 SET active = $2,
-    sessions_valid_after = CASE WHEN $2 THEN sessions_valid_after ELSE NOW() END
+    sessions_valid_after = CASE WHEN $2 THEN sessions_valid_after ELSE clock_timestamp() END
 WHERE id = $1
 `
 
@@ -2550,7 +2568,9 @@ type SetUserActiveParams struct {
 }
 
 // Deactivation ends every token issued before it (sessions_valid_after), so
-// reactivating the user cannot revive them.
+// reactivating the user cannot revive them. clock_timestamp(), under the lock
+// GetUserForUpdate took, is after any sign-in or refresh that held it up, where
+// NOW() is when the wait for them began.
 func (q *Queries) SetUserActive(ctx context.Context, arg SetUserActiveParams) (int64, error) {
 	result, err := q.db.Exec(ctx, setUserActive, arg.ID, arg.Active)
 	if err != nil {

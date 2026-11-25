@@ -55,6 +55,13 @@ type auditFixture struct {
 	tripID int64
 }
 
+// user is Ana's account as a sign-in with its password checks it.
+func (fx auditFixture) user() *User {
+	return &User{ID: fx.userID, PasswordHash: auditFixtureHash, Role: roleDriver, Active: true}
+}
+
+const auditFixtureHash = "not-a-real-hash"
+
 // newAuditFixture clears the last fixture and writes a new one straight to
 // the tables, so making it records nothing.
 func newAuditFixture(t *testing.T, store *Store) auditFixture {
@@ -65,7 +72,7 @@ func newAuditFixture(t *testing.T, store *Store) auditFixture {
 	_, err := store.pool.Exec(ctx, `INSERT INTO vehicles (id, label, agency_tag) VALUES ('aud-v', 'Old', 'north'), ('aud-v2', 'Spare', '')`)
 	require.NoError(t, err)
 	require.NoError(t, store.pool.QueryRow(ctx,
-		`INSERT INTO users (name, email, password_hash, role) VALUES ('Ana', 'aud-ana@example.org', 'not-a-real-hash', 'driver') RETURNING id`,
+		`INSERT INTO users (name, email, password_hash, role) VALUES ('Ana', 'aud-ana@example.org', $1, 'driver') RETURNING id`, auditFixtureHash,
 	).Scan(&fx.userID))
 	_, err = store.pool.Exec(ctx, `INSERT INTO user_vehicles (user_id, vehicle_id) VALUES ($1, 'aud-v')`, fx.userID)
 	require.NoError(t, err)
@@ -435,8 +442,9 @@ var auditedWrites = []auditedWrite{
 	},
 	{
 		name: "sign in to the admin UI",
-		act: func(ctx context.Context, s *Store, _ auditFixture) error {
-			return s.RecordSignIn(signingThrough(ctx, auditViaAdmin))
+		act: func(ctx context.Context, s *Store, fx auditFixture) error {
+			_, err := s.RecordSignIn(signingThrough(ctx, auditViaAdmin), fx.user())
+			return err
 		},
 		want: func(*testing.T, *Store, auditFixture) wantAuditRow {
 			return wantAuditRow{auditSession, idText(testAuditActor.UserID), auditSignIn, "", `{"via":"admin"}`}
@@ -449,7 +457,8 @@ var auditedWrites = []auditedWrite{
 	{
 		name: "sign in through the API",
 		act: func(ctx context.Context, s *Store, fx auditFixture) error {
-			return s.CreateRefreshToken(signingThrough(ctx, auditViaAPI), "aud-hash", fx.userID, time.Now().Add(time.Hour))
+			_, err := s.CreateRefreshToken(signingThrough(ctx, auditViaAPI), "aud-hash", fx.user(), time.Now().Add(time.Hour))
+			return err
 		},
 		want: func(*testing.T, *Store, auditFixture) wantAuditRow {
 			return wantAuditRow{auditSession, idText(testAuditActor.UserID), auditSignIn, "", `{"via":"api"}`}

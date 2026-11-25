@@ -23,18 +23,19 @@ type RefreshRequest struct {
 // they hold turns a guess into information.
 const invalidRefreshTokenMessage = "invalid or expired refresh token"
 
-// issueRefreshToken mints a refresh token and stores its hash, returning the
-// plaintext — the only moment the server holds a value it could not
-// reconstruct.
-func issueRefreshToken(ctx context.Context, creator RefreshTokenCreator, userID int64, ttl time.Duration) (string, error) {
-	token, err := newRefreshTokenValue()
+// issueRefreshToken mints a refresh token for user's sign-in and stores its
+// hash, returning the plaintext — the only moment the server holds a value it
+// could not reconstruct — and when the sign-in counts as done.
+func issueRefreshToken(ctx context.Context, creator RefreshTokenCreator, user *User, ttl time.Duration) (token string, signedInAt time.Time, err error) {
+	token, err = newRefreshTokenValue()
 	if err != nil {
-		return "", err
+		return "", time.Time{}, err
 	}
-	if err := creator.CreateRefreshToken(ctx, hashRefreshToken(token), userID, time.Now().Add(ttl)); err != nil {
-		return "", err
+	signedInAt, err = creator.CreateRefreshToken(ctx, hashRefreshToken(token), user, time.Now().Add(ttl))
+	if err != nil {
+		return "", time.Time{}, err
 	}
-	return token, nil
+	return token, signedInAt, nil
 }
 
 // newLoginResponse builds the token payload shared by login and refresh. It

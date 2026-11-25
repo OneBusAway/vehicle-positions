@@ -179,8 +179,8 @@ func (n *noopStore) CountActiveAPIKeys(_ context.Context) (int, error) {
 func (n *noopStore) ListAuditEntries(_ context.Context, _ auditFilter) ([]auditEntry, error) {
 	return make([]auditEntry, 0), nil
 }
-func (n *noopStore) RecordSignIn(_ context.Context) error {
-	return nil
+func (n *noopStore) RecordSignIn(_ context.Context, _ *User) (time.Time, error) {
+	return time.Now(), nil
 }
 func (n *noopStore) NoteFailedSignIn(_ *User, _, _ string) {}
 func (n *noopStore) DeactivateAPIKey(_ context.Context, _ int64) error {
@@ -195,8 +195,8 @@ func (n *noopStore) IsTokenRevoked(_ context.Context, _ string) (bool, error) {
 func (n *noopStore) IsUserActiveInRole(_ context.Context, _ int64, _ string, _ time.Time) (bool, error) {
 	return true, nil
 }
-func (n *noopStore) CreateRefreshToken(_ context.Context, _ string, _ int64, _ time.Time) error {
-	return nil
+func (n *noopStore) CreateRefreshToken(_ context.Context, _ string, _ *User, _ time.Time) (time.Time, error) {
+	return time.Now(), nil
 }
 
 // GetRefreshToken reports every token as unknown. That is the safe stub for

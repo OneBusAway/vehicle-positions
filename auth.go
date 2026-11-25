@@ -198,22 +198,29 @@ func handleLogin(fetcher UserFetcher, refreshTokens RefreshTokenCreator, failure
 			limiter.RecordSuccess(clientIP(r, trustProxy), req.Email)
 		}
 
-		accessToken, err := generateJWT(user, secret, ttls.access)
-		if err != nil {
-			slog.Error("token generation failed", "error", err)
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
-			return
-		}
-
 		// A login that returned an access token but no refresh token would
 		// leave the client with a credential it cannot renew, and it would
 		// find that out only once the access token expired. Fail the login
 		// instead. An admin's or a viewer's login that cannot be recorded in
 		// the audit log fails here too: the two are one transaction.
 		ctx := withSessionActor(r, user, auditViaAPI, trustProxy)
-		refreshToken, err := issueRefreshToken(ctx, refreshTokens, user.ID, ttls.refresh)
+		refreshToken, signedInAt, err := issueRefreshToken(ctx, refreshTokens, user, ttls.refresh)
+		if errors.Is(err, ErrAccountChangedMeanwhile) {
+			// The password is no longer the account's, or the account is gone or
+			// deactivated: the answer to a login that came a moment later.
+			failures.NoteFailedSignIn(user, clientIP(r, trustProxy), auditViaAPI)
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid email or password"})
+			return
+		}
 		if err != nil {
 			slog.Error("login: failed to issue refresh token", "sub", user.ID, "error", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+			return
+		}
+
+		accessToken, err := generateJWTIssuedAt(user, secret, ttls.access, signedInAt)
+		if err != nil {
+			slog.Error("token generation failed", "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 			return
 		}
@@ -270,17 +277,14 @@ func newJTI() (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
-// generateJWT creates a signed JWT valid for ttl. It is the only path that
-// issues session tokens — the JSON API login, the refresh endpoint, and the
-// admin UI's form login all call it — so every token carries a jti and can be
-// revoked. The TTL is a parameter because those callers no longer agree on
-// one: API access tokens are short and renewable, the admin UI's cookie
-// session is not (see sessionLifetime).
-func generateJWT(user *User, secret []byte, ttl time.Duration) (string, error) {
-	return generateJWTIssuedAt(user, secret, ttl, time.Now())
-}
-
-// generateJWTIssuedAt is generateJWT for a token that counts as issued at now.
+// generateJWTIssuedAt creates a signed JWT valid for ttl that counts as issued
+// at now, when the sign-in or the refresh it is for was done under the user
+// lock. It is the only path that issues session tokens — the JSON API login,
+// the refresh endpoint, and the admin UI's form login all call it — so every
+// token carries a jti and can be revoked. The TTL is a parameter because those
+// callers no longer agree on one: API access tokens are short and renewable,
+// the admin UI's cookie session is not (see sessionLifetime).
+//
 // iat is whole seconds, as JWT readers expect it; issuedAtClaim is the same
 // instant to the microsecond, as Postgres keeps the one it is compared with.
 func generateJWTIssuedAt(user *User, secret []byte, ttl time.Duration, now time.Time) (string, error) {
@@ -372,8 +376,8 @@ func requireAdmin(trustProxy bool) func(http.Handler) http.Handler {
 // through JWT parsing.
 //
 // WithExpirationRequired rejects a signed token that carries no exp claim.
-// generateJWT always sets one, and a revocation row needs the expiry to record
-// expires_at, so a token without exp is not one this server issued.
+// generateJWTIssuedAt always sets one, and a revocation row needs the expiry to
+// record expires_at, so a token without exp is not one this server issued.
 func parseSessionToken(tokenString string, secret []byte) (jwt.MapClaims, error) {
 	token, err := jwt.Parse(tokenString, func(t *jwt.Token) (interface{}, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
@@ -405,7 +409,8 @@ func parseSessionToken(tokenString string, secret []byte) (jwt.MapClaims, error)
 // A deactivation, a role change or the user's own password change ends the
 // tokens issued before it for good, so reactivating the user or giving the old
 // role back does not revive them. That is decided by tokenIssuedAt. Every token
-// generateJWT issues says when, so a staff token that doesn't is refused.
+// generateJWTIssuedAt issues says when, so a staff token that doesn't is
+// refused.
 // It is the second half of validation, kept out of parseSessionToken so that
 // function stays pure; both token paths (the API's Authorization header and
 // the admin UI's vp_session cookie) must call it, and
@@ -589,7 +594,7 @@ func handleLogout(revoker TokenRevoker, refreshTokens RefreshTokenDeleter, trust
 		}
 
 		// sub is a string, not a number (JSON number precision, see
-		// generateJWT), so parse it rather than asserting a float64.
+		// generateJWTIssuedAt), so parse it rather than asserting a float64.
 		sub, err := claims.GetSubject()
 		if err != nil {
 			slog.Warn("logout: unreadable sub claim", "error", err)

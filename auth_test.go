@@ -42,6 +42,11 @@ func (m *mockUserStore) UpdateUserLastSeen(_ context.Context, id int64) error {
 	return m.seenErr
 }
 
+// generateJWT is the token of a sign-in done now.
+func generateJWT(user *User, secret []byte, ttl time.Duration) (string, error) {
+	return generateJWTIssuedAt(user, secret, ttl, time.Now())
+}
+
 func postLogin(handler http.HandlerFunc, email, password string) *httptest.ResponseRecorder {
 	body, _ := json.Marshal(LoginRequest{Email: email, Password: password})
 	req := httptest.NewRequest("POST", "/api/v1/auth/login", bytes.NewReader(body))

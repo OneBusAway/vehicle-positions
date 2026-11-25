@@ -85,10 +85,12 @@ DELETE FROM users WHERE id = $1;
 
 -- name: SetUserActive :execrows
 -- Deactivation ends every token issued before it (sessions_valid_after), so
--- reactivating the user cannot revive them.
+-- reactivating the user cannot revive them. clock_timestamp(), under the lock
+-- GetUserForUpdate took, is after any sign-in or refresh that held it up, where
+-- NOW() is when the wait for them began.
 UPDATE users
 SET active = $2,
-    sessions_valid_after = CASE WHEN $2 THEN sessions_valid_after ELSE NOW() END
+    sessions_valid_after = CASE WHEN $2 THEN sessions_valid_after ELSE clock_timestamp() END
 WHERE id = $1;
 
 -- name: UpdateUserPassword :execrows
@@ -100,6 +102,11 @@ SELECT email, password_hash FROM users WHERE id = $1;
 -- name: GetUserPasswordForUpdate :one
 -- LockUser's lock, reading the password the change that follows replaces.
 SELECT password_hash FROM users WHERE id = $1 FOR UPDATE;
+
+-- name: GetSignInForUpdate :one
+-- What a sign-in checked, read under GetUserForUpdate's lock, which waits for
+-- every change that ends the account's sign-ins and holds each of them up.
+SELECT password_hash, active FROM users WHERE id = $1 FOR NO KEY UPDATE;
 
 -- name: ChangeOwnPassword :exec
 -- Ends every token issued up to ended_at (sessions_valid_after), unless one
@@ -121,8 +128,8 @@ UPDATE users SET last_seen_at = NOW() WHERE id = $1 AND last_seen_at IS DISTINCT
 -- Serializes rotation and revocation of one user's refresh tokens. Both take
 -- this before reading or writing refresh_tokens, so a revocation cannot run
 -- while a rotation is mid-transaction. The users row is the mutex because the
--- row a revoker has to see, the rotation's replacement, does not exist yet.
--- Login does not take it.
+-- row a revoker has to see, the rotation's replacement, does not exist yet. A
+-- sign-in takes GetSignInForUpdate's, which waits for this one.
 SELECT id FROM users WHERE id = $1 FOR UPDATE;
 
 -- name: LockUserForKeyShare :one

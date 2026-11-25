@@ -50,7 +50,7 @@ type RefreshToken struct {
 // RefreshTokenCreator stores a freshly minted refresh token. The login
 // handler needs only this.
 type RefreshTokenCreator interface {
-	CreateRefreshToken(ctx context.Context, tokenHash string, userID int64, expiresAt time.Time) error
+	CreateRefreshToken(ctx context.Context, tokenHash string, user *User, expiresAt time.Time) (signedInAt time.Time, err error)
 }
 
 // RefreshTokenGetter looks up a stored token by hash.
@@ -76,21 +76,22 @@ type RefreshTokenPruneStore interface {
 	PruneExpiredRefreshTokens(ctx context.Context, cutoff time.Time) (int64, error)
 }
 
-// CreateRefreshToken persists the hash of a new refresh token, the one a
-// sign-in hands out. The sign-in of an account that may use the admin UI is
-// recorded in the audit log in the same transaction. A renewal's token is
-// RotateRefreshToken's, which records nothing.
-func (s *Store) CreateRefreshToken(ctx context.Context, tokenHash string, userID int64, expiresAt time.Time) error {
-	return s.inSessionTx(ctx, func(q *db.Queries) error {
+// CreateRefreshToken persists the hash of a new refresh token, the one user's
+// sign-in hands out, and returns when that counts as done: see signIn. The
+// sign-in of an account that may use the admin UI is recorded in the audit log
+// in the same transaction. A renewal's token is RotateRefreshToken's, which
+// records nothing.
+func (s *Store) CreateRefreshToken(ctx context.Context, tokenHash string, user *User, expiresAt time.Time) (signedInAt time.Time, err error) {
+	return s.signIn(ctx, user, func(q *db.Queries) error {
 		err := q.CreateRefreshToken(ctx, db.CreateRefreshTokenParams{
 			TokenHash: tokenHash,
-			UserID:    userID,
+			UserID:    user.ID,
 			ExpiresAt: pgtype.Timestamptz{Time: expiresAt, Valid: true},
 		})
 		if err != nil {
 			return fmt.Errorf("create refresh token: %w", err)
 		}
-		return recordSession(ctx, q, auditSignIn)
+		return nil
 	})
 }
 
