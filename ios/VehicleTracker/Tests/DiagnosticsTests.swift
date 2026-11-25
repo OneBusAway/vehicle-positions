@@ -223,7 +223,7 @@ import Testing
         #expect(url.lastPathComponent == "Vehicle Tracker diagnostics.txt")
         #expect(text.hasPrefix("Vehicle Tracker diagnostics\nMade: "))
         #expect(text.contains("\nServer: tracker.example.org\n"))
-        #expect(text.contains("\nApp: \(AccountMenu.versionNumber(Bundle.main.infoDictionary))\n"))
+        #expect(text.contains("\nApp: \(AccountText.versionNumber(Bundle.main.infoDictionary))\n"))
         #expect(text.contains("\nLocation: allowed\nPrecise location: allowed\n"))
         #expect(text.utf8.count < 20_000)
 

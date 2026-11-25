@@ -88,6 +88,11 @@ import UIKit
         #expect(try Self.contrast("OnAccent", on: "AccentColor", style) >= 4.5)
         // An icon, so WCAG's 3:1 for graphics.
         #expect(try Self.contrast("Amber", on: "ProblemContainer", style) >= 3)
+        // The line along the lower edge of Settings' header, and what is
+        // missing on it.
+        #expect(try Self.contrast("AccentColor", on: "AccentContainer", style) >= 3)
+        #expect(try Self.contrast("AccentColor", on: "AttentionContainer", style) >= 3)
+        #expect(try Self.contrast("AmberOnSurface", on: "AttentionContainer", style) >= 3)
     }
 
     @Test(arguments: styles) func statusTonesDrawTheirOwnColourSets(_ style: UIUserInterfaceStyle) throws {

@@ -1,10 +1,10 @@
 import SwiftUI
 
-/// The Language row, on the first welcome screen and at the top of Help, as
-/// Android's: "Language: English", in the language the app shows. iOS keeps
-/// each app's language on the app's own page in Settings
-/// (UIPrefersShowingLanguageSettings), so a tap opens that page. Its globe
-/// marks it for a driver who can't read the words around it.
+/// The Language row on the first welcome screen, as Android's: "Language:
+/// English", in the language the app shows. iOS keeps each app's language on
+/// the app's own page in Settings (UIPrefersShowingLanguageSettings), so a
+/// tap opens that page. Its globe marks it for a driver who can't read the
+/// words around it.
 struct LanguageRow: View {
     @Environment(\.openURL) private var openURL
 
@@ -48,6 +48,6 @@ nonisolated enum AppLanguage {
 
 nonisolated enum LanguageText {
     static func row(_ language: String) -> String {
-        String(localized: "Language: \(language)", comment: "The Language row, on the first welcome screen and at the top of Help. The language the app is shown in, named in that language, e.g. 'Language: English'. A tap opens the app's page in Settings, where its language is chosen.")
+        String(localized: "Language: \(language)", comment: "The Language row on the first welcome screen. The language the app is shown in, named in that language, e.g. 'Language: English'. A tap opens the app's page in Settings, where its language is chosen.")
     }
 }

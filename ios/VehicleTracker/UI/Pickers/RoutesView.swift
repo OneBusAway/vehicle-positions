@@ -16,7 +16,7 @@ struct RoutesView: View {
         content
             .navigationTitle(PickerText.routesTitle)
             .navigationSubtitle(PickerText.vehicle(vehicle.id))
-            .toolbar { AccountMenu() }
+            .toolbar { AccountButton() }
             .searchable(text: $query, prompt: PickerText.routeSearchPrompt)
             // One load per visit: Back finds the same rows at the same place.
             .task(id: loadRequest) {

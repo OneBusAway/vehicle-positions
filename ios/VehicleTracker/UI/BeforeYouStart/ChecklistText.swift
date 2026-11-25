@@ -52,7 +52,7 @@ nonisolated enum ChecklistText {
     }
 
     static var openSettings: String {
-        String(localized: "Open Settings", comment: "Checklist row button that opens the app's page in the Settings app, where refused location can be allowed.")
+        String(localized: "Open Settings", comment: "Checklist row button, and the button under 'Not ready to report' in the app's own Settings, that opens the app's page in the Settings app, where location can be allowed.")
     }
 
     static var `continue`: String {
