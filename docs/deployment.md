@@ -1171,7 +1171,8 @@ The **Android release** workflow (`.github/workflows/android-release.yml`)
 builds the APK signed with your key, versioned `1.2.0` with its `versionCode`
 derived from the tag (`major * 10000 + minor * 100 + patch`, e.g. `10200`),
 checks the signature, and attaches `vehicle-tracker-1.2.0.apk` to a GitHub
-Release named after the tag. Release tags must be `android-v0.1.0` or higher
+Release named after the tag, with `vehicle-tracker-1.2.0.aab` beside it for
+Google Play. Release tags must be `android-v0.1.0` or higher
 (`versionCode >= 100`) so release builds strictly outrank CI test artifacts
 (`versionCode = 1`). To build your server's address into it
 (section 13.2), add a repository variable (the **Variables** tab beside the
@@ -1179,6 +1180,13 @@ secrets) named `DEFAULT_SERVER_URL`, such as `https://tracker.example.org`.
 Without it, Sign in starts empty.
 Prerelease tags (e.g. `1.2.0-rc1`) strip the suffix and share the same code;
 bump the patch for each prerelease you hand out.
+
+**For Google Play.** Play takes an app bundle instead of an APK.
+`./gradlew :app:bundleRelease`, with the same variables and version flags as
+above, writes a signed `app/build/outputs/bundle/release/app-release.aab`. A
+bundle can't be installed on a phone, so hand drivers the APK. Every phone gets
+all of the app's languages, not only the phone's own, so that the app's language
+list works.
 
 ### 12.5 Get it onto driver phones
 

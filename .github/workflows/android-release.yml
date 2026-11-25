@@ -1,6 +1,7 @@
 name: Android release
 
-# Publishes a signed APK as a GitHub Release when a tag like `android-v1.2.0` is pushed.
+# Publishes a signed APK, and a signed app bundle for Google Play, as a GitHub Release when a tag
+# like `android-v1.2.0` is pushed.
 # Needs four repository secrets (Settings → Secrets and variables → Actions):
 #   ANDROID_KEYSTORE_BASE64   base64 of the .jks file (`base64 -i vehicle-tracker-release.jks`)
 #   ANDROID_KEYSTORE_PASSWORD
@@ -57,18 +58,22 @@ jobs:
             echo "versionCode must be at least 100 (tag >= android-v0.1.0) so release builds outrank CI test artifacts" >&2
             exit 1
           fi
-          ./gradlew :app:assembleRelease \
+          ./gradlew :app:assembleRelease :app:bundleRelease \
             -PversionCode="$VERSION_CODE" \
             -PversionName="$VERSION_NAME" \
             -PdefaultServerUrl="$DEFAULT_SERVER_URL"
-      - name: Verify the signature
+      # apksigner does not read a bundle, and jarsigner exits 0 for one with no signature.
+      - name: Verify the signatures
         run: |
           "$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner" \
             verify --print-certs app/build/outputs/apk/release/app-release.apk
+          jarsigner -verify app/build/outputs/bundle/release/app-release.aab | grep -F "jar verified."
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cp app/build/outputs/apk/release/app-release.apk "vehicle-tracker-${GITHUB_REF_NAME#android-v}.apk"
-          gh release create "$GITHUB_REF_NAME" "vehicle-tracker-${GITHUB_REF_NAME#android-v}.apk" \
+          NAME="vehicle-tracker-${GITHUB_REF_NAME#android-v}"
+          cp app/build/outputs/apk/release/app-release.apk "$NAME.apk"
+          cp app/build/outputs/bundle/release/app-release.aab "$NAME.aab"
+          gh release create "$GITHUB_REF_NAME" "$NAME.apk" "$NAME.aab" \
             --title "Android $GITHUB_REF_NAME" --generate-notes
