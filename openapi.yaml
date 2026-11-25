@@ -2191,6 +2191,47 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /api/v1/trips:
+    get:
+      tags: [trips]
+      summary: List the authenticated driver's own trips
+      description: |
+        Returns the calling driver's trips, newest first, the running one
+        included. The driver identity comes from the JWT `sub` claim, so no
+        parameter can ask for anyone else's. Requires a driver or admin bearer
+        token; a `viewer` token is refused with `403`. This is the
+        driver-facing counterpart to `GET /api/v1/admin/trips`.
+      parameters:
+        - in: query
+          name: limit
+          required: false
+          schema:
+            $ref: '#/components/schemas/TripListLimit'
+          description: Maximum number of trips to return.
+        - in: query
+          name: offset
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          description: Number of trips to skip.
+      responses:
+        '200':
+          description: The driver's trips.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MyTripList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
   /api/v1/trips/start:
     post:
       tags: [trips]
@@ -3771,6 +3812,74 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TripSummary'
+
+    MyTripList:
+      type: object
+      required: [count, has_more, trips]
+      properties:
+        count:
+          type: integer
+          minimum: 0
+          description: Number of trips in `trips`, after the `limit` cap is applied.
+        has_more:
+          type: boolean
+          description: True when more trips exist past this page.
+        trips:
+          type: array
+          items:
+            $ref: '#/components/schemas/MyTrip'
+
+    MyTrip:
+      type: object
+      description: |
+        One of the calling driver's own trips. `route` and `headsign` come from
+        the schedule as it is now, so a trip keeps them only as long as the
+        schedule has its route and its trip.
+      required:
+        - id
+        - vehicle_id
+        - vehicle_label
+        - route_id
+        - route
+        - gtfs_trip_id
+        - headsign
+        - start_time
+        - status
+      properties:
+        id:
+          type: integer
+          format: int64
+        vehicle_id:
+          $ref: '#/components/schemas/VehicleID'
+        vehicle_label:
+          type: string
+        route_id:
+          type: string
+          description: The route the trip was started with; empty when it was started without one.
+        route:
+          description: |
+            The trip's route, from `route_id` or else from its GTFS trip. Null
+            when it has neither, or the schedule no longer has the route.
+          oneOf:
+            - $ref: '#/components/schemas/CatalogTripRoute'
+            - type: 'null'
+        gtfs_trip_id:
+          type: string
+        headsign:
+          type: string
+          description: The GTFS trip's headsign; empty when there is none.
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+          description: |
+            Present only on completed trips. The server omits this field while
+            the trip is active (Go `*time.Time` with `omitempty`).
+        status:
+          type: string
+          enum: [active, completed]
 
     TripSummary:
       type: object
