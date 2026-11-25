@@ -139,8 +139,7 @@
     <string name="setup_step_run">班次</string>
     <string name="setup_clear_search">清除搜索内容</string>
 
-    <!-- The account menu -->
-    <string name="account_menu">账号</string>
+    <!-- Sign out -->
     <string name="account_sign_out">退出登录</string>
     <string name="account_sign_out_title">要退出登录吗？</string>
     <string name="account_sign_out_message">下一位司机就可以在此手机上登录。</string>

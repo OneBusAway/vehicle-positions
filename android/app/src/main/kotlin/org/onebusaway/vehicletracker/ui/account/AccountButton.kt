@@ -39,7 +39,7 @@ internal val LocalOpenSettings = compositionLocalOf<() -> Unit> { {} }
 @Composable
 fun AccountButton(enabled: Boolean = true) {
     IconButton(onClick = LocalOpenSettings.current, enabled = enabled) {
-        Icon(painterResource(R.drawable.ic_account_circle), contentDescription = stringResource(R.string.account_menu))
+        Icon(painterResource(R.drawable.ic_account_circle), contentDescription = stringResource(R.string.settings_title))
     }
 }
 

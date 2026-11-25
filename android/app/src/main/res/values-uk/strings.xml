@@ -143,8 +143,7 @@
     <string name="setup_step_run">Рейс</string>
     <string name="setup_clear_search">Очистити пошук</string>
 
-    <!-- The account menu -->
-    <string name="account_menu">Обліковий запис</string>
+    <!-- Sign out -->
     <string name="account_sign_out">Вийти</string>
     <string name="account_sign_out_title">Вийти?</string>
     <string name="account_sign_out_message">Наступний водій зможе увійти на цьому телефоні.</string>

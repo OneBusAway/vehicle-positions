@@ -56,6 +56,8 @@ import org.onebusaway.vehicletracker.service.ServiceControllerImpl
 import org.onebusaway.vehicletracker.service.TrackingNotification
 import org.onebusaway.vehicletracker.service.appInFront
 import org.onebusaway.vehicletracker.service.canReportInBackground
+import org.onebusaway.vehicletracker.ui.theme.ThemeController
+import org.onebusaway.vehicletracker.ui.theme.themeController
 import java.io.File
 import java.time.Duration
 import java.time.ZoneId
@@ -316,6 +318,9 @@ object AppModule {
             cancelTripNotifications = { TrackingNotification(context).cancel() },
             postResume = { TrackingNotification(context).postResumeIfPermitted() },
         )
+
+    @Provides
+    fun provideThemeController(@ApplicationContext context: Context): ThemeController = themeController(context)
 
     @Provides
     fun provideRestartTracking(

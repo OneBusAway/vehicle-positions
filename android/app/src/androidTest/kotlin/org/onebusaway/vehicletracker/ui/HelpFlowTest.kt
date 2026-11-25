@@ -79,7 +79,7 @@ class HelpFlowTest {
     private fun waitForHeading(id: Int) = compose.waitUntil(TIMEOUT_MS) { heading(id) }
 
     private fun waitForTheVehicleStep() = compose.waitUntil(TIMEOUT_MS) {
-        compose.onAllNodes(hasContentDescription(string(R.string.account_menu))).fetchSemanticsNodes().isNotEmpty() &&
+        compose.onAllNodes(hasContentDescription(string(R.string.settings_title))).fetchSemanticsNodes().isNotEmpty() &&
             !heading(R.string.settings_title)
     }
 
@@ -94,7 +94,7 @@ class HelpFlowTest {
 
     private fun openHelp() {
         waitForTheVehicleStep()
-        compose.onNode(hasContentDescription(string(R.string.account_menu))).performClick()
+        compose.onNode(hasContentDescription(string(R.string.settings_title))).performClick()
         waitForSettings()
         // A tap during the slide in does nothing.
         compose.waitForIdle()

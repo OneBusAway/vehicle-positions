@@ -139,8 +139,7 @@
     <string name="setup_step_run">Chuyến</string>
     <string name="setup_clear_search">Xóa tìm kiếm</string>
 
-    <!-- The account menu -->
-    <string name="account_menu">Tài khoản</string>
+    <!-- Sign out -->
     <string name="account_sign_out">Đăng xuất</string>
     <string name="account_sign_out_title">Đăng xuất?</string>
     <string name="account_sign_out_message">Tài xế tiếp theo có thể đăng nhập trên điện thoại này.</string>

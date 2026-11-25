@@ -3,12 +3,7 @@ package org.onebusaway.vehicletracker.ui.language
 import android.os.Build
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -17,7 +12,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -25,7 +19,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
@@ -37,8 +30,8 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.intl.LocaleList
 import androidx.compose.ui.text.withStyle
-import androidx.compose.ui.unit.dp
 import org.onebusaway.vehicletracker.R
+import org.onebusaway.vehicletracker.ui.components.ChoiceRow
 import org.onebusaway.vehicletracker.ui.components.GroupOuterCorner
 import org.onebusaway.vehicletracker.ui.components.QuietButton
 
@@ -115,31 +108,12 @@ internal fun LanguageList(languages: List<AppLanguage>, shownTag: String, onChoo
         text = {
             Column(Modifier.selectableGroup().verticalScroll(rememberScrollState())) {
                 for (language in languages) {
-                    LanguageChoice(language, selected = language.tag == shownTag) { onChoose(language.tag) }
+                    ChoiceRow(inItsLanguage(language), language.englishName, selected = language.tag == shownTag) { onChoose(language.tag) }
                 }
             }
         },
         confirmButton = { QuietButton(stringResource(R.string.language_list_cancel), onClick = onDismiss) },
     )
-}
-
-@Composable
-private fun LanguageChoice(language: AppLanguage, selected: Boolean, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 56.dp)
-            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        RadioButton(selected = selected, onClick = null)
-        Column(Modifier.padding(start = 16.dp)) {
-            Text(inItsLanguage(language), style = MaterialTheme.typography.bodyLarge)
-            language.englishName?.let {
-                Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-    }
 }
 
 /** The language's own name, marked as written in it: TalkBack reads it with that language's voice. */

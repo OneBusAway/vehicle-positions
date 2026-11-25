@@ -27,6 +27,7 @@ import org.junit.runner.RunWith
 import org.junit.runners.Parameterized
 import org.onebusaway.vehicletracker.R
 import org.onebusaway.vehicletracker.data.ActiveTrip
+import org.onebusaway.vehicletracker.data.ThemeChoice
 import org.onebusaway.vehicletracker.data.TrackingProblem
 import org.onebusaway.vehicletracker.data.TrackingState
 import org.onebusaway.vehicletracker.data.api.VehicleDto
@@ -258,7 +259,8 @@ class PseudolocaleScreensTest(private val tag: String) {
             readiness = readiness(PhoneAccess(grants, locationServicesOn = true), waiting = null),
             account = AccountUiState("driver@example.com", "tracker.example.org"),
             version = "0.1.0 (1)",
-            onBack = {}, onOpenPhoneSettings = {}, onSignOut = {}, onSignedOut = {}, onHelp = {}, onShare = {},
+            theme = ThemeChoice.SYSTEM,
+            onBack = {}, onOpenPhoneSettings = {}, onSignOut = {}, onSignedOut = {}, onChooseTheme = {}, onHelp = {}, onShare = {},
         )
     }
 

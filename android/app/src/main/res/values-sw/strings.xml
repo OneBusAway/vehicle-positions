@@ -140,8 +140,7 @@
     <string name="setup_step_run">Raundi</string>
     <string name="setup_clear_search">Futa utafutaji</string>
 
-    <!-- The account menu -->
-    <string name="account_menu">Akaunti</string>
+    <!-- Sign out -->
     <string name="account_sign_out">Ondoka</string>
     <string name="account_sign_out_title">Ondoka kwenye akaunti?</string>
     <string name="account_sign_out_message">Dereva anayefuata anaweza kuingia kwenye simu hii.</string>

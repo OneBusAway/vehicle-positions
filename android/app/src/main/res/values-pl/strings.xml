@@ -146,8 +146,7 @@
     <string name="setup_step_run">Kurs</string>
     <string name="setup_clear_search">Wyczyść wyszukiwanie</string>
 
-    <!-- The account menu -->
-    <string name="account_menu">Konto</string>
+    <!-- Sign out -->
     <string name="account_sign_out">Wyloguj się</string>
     <string name="account_sign_out_title">Wylogować się?</string>
     <string name="account_sign_out_message">Następny kierowca może się wtedy zalogować na tym telefonie.</string>

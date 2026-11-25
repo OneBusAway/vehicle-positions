@@ -1,5 +1,6 @@
 package org.onebusaway.vehicletracker
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -26,6 +27,7 @@ import org.onebusaway.vehicletracker.ui.AppNav
 import org.onebusaway.vehicletracker.ui.AppNavViewModel
 import org.onebusaway.vehicletracker.ui.setup.ServerSetupPrompt
 import org.onebusaway.vehicletracker.ui.theme.AppTheme
+import org.onebusaway.vehicletracker.ui.theme.themeController
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -38,6 +40,12 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var serverSetup: ServerSetup
 
     private val navViewModel: AppNavViewModel by viewModels()
+
+    // Before anything asks for the activity's resources, and so before Hilt has injected anything.
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(newBase)
+        themeController(newBase).activityConfiguration()?.let(::applyOverrideConfiguration)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         val splash = installSplashScreen()

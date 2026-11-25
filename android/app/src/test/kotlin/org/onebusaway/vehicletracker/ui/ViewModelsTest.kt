@@ -1902,7 +1902,7 @@ class ViewModelsTest {
     }
 
     // A sign-out under a start would leave the trip started with nobody signed in to end it.
-    @Test fun `the account menu waits while a start is in flight`() = runTest(dispatcher) {
+    @Test fun `the account button waits while a start is in flight`() = runTest(dispatcher) {
         // Holds the run's geometry back, which the start waits on before it posts.
         val held = CountDownLatch(1)
         withRunsViewModel(geometry = { held.await(5, TimeUnit.SECONDS); MockResponse().setBody(t1GeometryJson) }) { vm, _, _, _ ->
@@ -2201,7 +2201,7 @@ class ViewModelsTest {
         }
     }
 
-    // --- Sign out, from the account menu on the pickers ---
+    // --- Sign out, in Settings ---
 
     private val driver2 = jwtFor("2")
 
@@ -2222,7 +2222,7 @@ class ViewModelsTest {
         if (!condition()) fail("Timed out after 5000ms waiting for: $description")
     }
 
-    /** The account menu's view model, signed in as driver 2, over a [MockWebServer] that answers in the order enqueued. */
+    /** Its view model, signed in as driver 2, over a [MockWebServer] that answers in the order enqueued. */
     private inner class SignOut(
         val trips: FakeTripStateStore = FakeTripStateStore(),
         val prefs: FakeVehiclePrefsStore = FakeVehiclePrefsStore(),

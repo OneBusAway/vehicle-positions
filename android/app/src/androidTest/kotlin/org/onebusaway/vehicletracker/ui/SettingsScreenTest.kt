@@ -14,13 +14,18 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
@@ -28,14 +33,17 @@ import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.isHeading
+import androidx.compose.ui.test.isSelectable
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
@@ -50,6 +58,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.onebusaway.vehicletracker.R
 import org.onebusaway.vehicletracker.data.ReportsWaiting
+import org.onebusaway.vehicletracker.data.ThemeChoice
 import org.onebusaway.vehicletracker.data.WaitingOutlook
 import org.onebusaway.vehicletracker.ui.account.AccountButton
 import org.onebusaway.vehicletracker.ui.account.AccountUiState
@@ -61,6 +70,8 @@ import org.onebusaway.vehicletracker.ui.settings.SettingsContent
 import org.onebusaway.vehicletracker.ui.settings.readiness
 import org.onebusaway.vehicletracker.ui.settings.shareIntent
 import org.onebusaway.vehicletracker.ui.theme.AppTheme
+import org.onebusaway.vehicletracker.ui.theme.DarkColors
+import org.onebusaway.vehicletracker.ui.theme.LightColors
 
 /** Settings: what its header says, who is signed in and Sign out, its rows, how it folds, and the largest text. */
 @RunWith(AndroidJUnit4::class)
@@ -84,6 +95,7 @@ class SettingsScreenTest {
         var openPhoneSettings = 0
         var signOuts = 0
         var signedOut = 0
+        val themes = mutableListOf<ThemeChoice>()
         var help = 0
         var share = 0
     }
@@ -91,16 +103,18 @@ class SettingsScreenTest {
     private val calls = Calls()
 
     @Composable
-    private fun Content(readiness: Readiness = ready(), account: AccountUiState = this.account) {
-        AppTheme(darkTheme = false) {
+    private fun Content(readiness: Readiness = ready(), account: AccountUiState = this.account, theme: ThemeChoice = ThemeChoice.SYSTEM, dark: Boolean = false) {
+        AppTheme(darkTheme = dark) {
             SettingsContent(
                 readiness = readiness,
                 account = account,
                 version = "0.1.0 (1)",
+                theme = theme,
                 onBack = { calls.back++ },
                 onOpenPhoneSettings = { calls.openPhoneSettings++ },
                 onSignOut = { calls.signOuts++ },
                 onSignedOut = { calls.signedOut++ },
+                onChooseTheme = { calls.themes += it },
                 onHelp = { calls.help++ },
                 onShare = { calls.share++ },
             )
@@ -263,6 +277,26 @@ class SettingsScreenTest {
         assertEquals(open - 30f, top(R.string.language_list_title), 1f)
     }
 
+    @Test
+    fun aRowKeyboardFocusMovesBackTo_comesOutFromUnderTheFoldedHeader() {
+        InstrumentationRegistry.getInstrumentation().setInTouchMode(false)
+        try {
+            compose.setContent { Box(Modifier.requiredHeight(420.dp)) { Content() } }
+            compose.onNode(hasText(string(R.string.help_version))).performScrollTo()
+            compose.waitForIdle()
+
+            compose.onNode(hasText(string(R.string.language_list_title)) and hasClickAction()).requestFocus()
+            compose.waitForIdle()
+
+            // Back is in the middle of the bar, which is 64 dp tall, and the header folds to 8 dp more.
+            val back = compose.onNodeWithContentDescription(string(R.string.setup_navigate_up)).fetchSemanticsNode().boundsInRoot
+            val folded = back.center.y + with(compose.density) { 40.dp.toPx() }
+            assertTrue("${top(R.string.language_list_title)} is under the header, which ends at $folded", top(R.string.language_list_title) >= folded - 1f)
+        } finally {
+            InstrumentationRegistry.getInstrumentation().resetInTouchMode()
+        }
+    }
+
     // --- Who is signed in, and Sign out ---
 
     private fun askToSignOut() = compose.onNode(hasText(string(R.string.account_sign_out)) and hasClickAction()).performClick()
@@ -358,7 +392,7 @@ class SettingsScreenTest {
         var enabled by mutableStateOf(true)
         var opened = 0
         compose.setContent { CompositionLocalProvider(LocalOpenSettings provides { opened++ }) { AccountButton(enabled) } }
-        val button = compose.onNodeWithContentDescription(string(R.string.account_menu))
+        val button = compose.onNodeWithContentDescription(string(R.string.settings_title))
 
         button.performClick()
         assertEquals(1, opened)
@@ -389,6 +423,55 @@ class SettingsScreenTest {
         compose.onNode(hasText(string(R.string.language_list_title)) and hasText("English") and hasClickAction()).performScrollTo().performClick()
 
         compose.onNode(hasText("English") and hasAnyAncestor(isDialog())).assertExists()
+    }
+
+    @Test
+    fun theThemeRowNamesTheThemeChosen_andItsListHasAllThreeWithThatOneSelected() {
+        compose.setContent { Content(theme = ThemeChoice.LIGHT) }
+
+        compose.onNode(hasText(string(R.string.settings_theme)) and hasText(string(R.string.theme_light)) and hasClickAction()).performScrollTo().performClick()
+
+        fun choice(name: Int) = compose.onNode(hasText(string(name)) and isSelectable() and hasAnyAncestor(isDialog()))
+        choice(R.string.theme_system).assert(hasText(string(R.string.theme_system_detail))).assertIsNotSelected()
+        choice(R.string.theme_light).assertIsSelected()
+        choice(R.string.theme_dark).assertIsNotSelected()
+    }
+
+    @Test
+    fun aThemeTappedInTheListIsChosenAndTheListCloses() {
+        compose.setContent { Content() }
+        compose.onNode(hasText(string(R.string.settings_theme)) and hasClickAction()).performScrollTo().performClick()
+
+        compose.onNode(hasText(string(R.string.theme_dark)) and hasAnyAncestor(isDialog())).performClick()
+
+        assertEquals(listOf(ThemeChoice.DARK), calls.themes)
+        compose.onNode(isDialog()).assertDoesNotExist()
+    }
+
+    @Test
+    fun aChangeOfThemeIsInTheHeaderAtOnce() {
+        var dark by mutableStateOf(false)
+        compose.setContent { Content(dark = dark) }
+        fun block() = compose.onRoot().captureToImage().toPixelMap()[8, 8]
+        assertEquals(LightColors.primaryContainer, block())
+
+        compose.mainClock.autoAdvance = false
+        dark = true
+        compose.mainClock.advanceTimeByFrame()
+        compose.mainClock.advanceTimeByFrame()
+
+        assertEquals(DarkColors.primaryContainer, block())
+    }
+
+    @Test
+    fun cancelInTheThemeListChoosesNothing() {
+        compose.setContent { Content() }
+        compose.onNode(hasText(string(R.string.settings_theme)) and hasClickAction()).performScrollTo().performClick()
+
+        compose.onNode(hasText(string(R.string.language_list_cancel)) and hasAnyAncestor(isDialog())).performClick()
+
+        assertEquals(emptyList<ThemeChoice>(), calls.themes)
+        compose.onNode(isDialog()).assertDoesNotExist()
     }
 
     @Test
