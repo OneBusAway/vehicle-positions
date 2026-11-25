@@ -39,6 +39,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -108,6 +109,9 @@ private const val SHOW_CHANGE_AFTER_MILLIS = 250L
 @Stable
 internal class HeaderFold(private val scroll: ScrollState) {
     var range by mutableIntStateOf(0)
+
+    /** How tall the header is once folded, set with [range]. */
+    var folded by mutableIntStateOf(0)
 
     val offset: Float get() = scroll.value.coerceAtMost(range).toFloat()
     val fraction: Float get() = if (range == 0) 0f else offset / range
@@ -205,16 +209,21 @@ internal fun ReadinessHeader(readiness: Readiness, fold: HeaderFold, onBack: () 
     val shown = shownReadiness(readiness)
     val words = headerWords(shown)
     val colors = MaterialTheme.colorScheme
-    val block = animateColorAsState(
-        if (shown.canReport) colors.primaryContainer else AppTheme.problemColors.attentionContainer,
-        AppMotion.slowEffectsSpec(),
-        label = "header",
-    )
-    val content = animateColorAsState(
-        if (shown.canReport) colors.onPrimaryContainer else colors.onSurface,
-        AppMotion.slowEffectsSpec(),
-        label = "header content",
-    )
+    // A change of state fades. A change of theme doesn't: the whole screen is in the new one at once.
+    val block = key(colors) {
+        animateColorAsState(
+            if (shown.canReport) colors.primaryContainer else AppTheme.problemColors.attentionContainer,
+            AppMotion.slowEffectsSpec(),
+            label = "header",
+        )
+    }
+    val content = key(colors) {
+        animateColorAsState(
+            if (shown.canReport) colors.onPrimaryContainer else colors.onSurface,
+            AppMotion.slowEffectsSpec(),
+            label = "header content",
+        )
+    }
     val largeText = LocalDensity.current.fontScale >= LARGE_TEXT_FROM
     val somethingMissing = StopState.MISSING in shown.stops
     val iconsIn = animateFloatAsState(if (somethingMissing && !largeText) 1f else 0f, AppMotion.defaultSpatialSpec(), label = "icons")
@@ -254,7 +263,8 @@ internal fun ReadinessHeader(readiness: Readiness, fold: HeaderFold, onBack: () 
 
         val wordsTop = bar.height - WordsIntoBar.roundToPx()
         val height = wordsTop + said.height + line.height
-        fold.range = (height - bar.height - FoldedEdge.roundToPx()).coerceAtLeast(0)
+        fold.folded = bar.height + FoldedEdge.roundToPx()
+        fold.range = (height - fold.folded).coerceAtLeast(0)
         layout(width, height) {
             said.place(0, wordsTop)
             strip.place(0, 0)

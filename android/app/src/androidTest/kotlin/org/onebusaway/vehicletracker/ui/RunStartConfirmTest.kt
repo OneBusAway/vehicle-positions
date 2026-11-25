@@ -3,7 +3,6 @@ package org.onebusaway.vehicletracker.ui
 import android.view.KeyEvent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -25,7 +24,6 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
-import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -65,7 +63,6 @@ import org.onebusaway.vehicletracker.data.tripStateDataStore
 import org.onebusaway.vehicletracker.data.vehiclePrefsDataStore
 import org.onebusaway.vehicletracker.service.BacklogUploadScheduler
 import org.onebusaway.vehicletracker.service.ServiceController
-import org.onebusaway.vehicletracker.ui.account.AccountViewModel
 import org.onebusaway.vehicletracker.ui.runs.BoardRun
 import org.onebusaway.vehicletracker.ui.runs.RunLabel
 import org.onebusaway.vehicletracker.ui.runs.RunsScreen
@@ -168,10 +165,7 @@ class RunStartConfirmTest {
     private val tripRepository = TripRepository(api, trips, DataStoreVehiclePrefsStore(context.vehiclePrefsDataStore), sessions, clock)
     private val auth = AuthRepository(sessions, trips, ApiFactory { null }, api, FileOfflineFixQueue(queueFile), noBacklog, clock)
 
-    /**
-     * Not a Hilt screen, so the run step's view models are made here. The account menu asks Hilt for its own; outside
-     * a navigation entry Hilt takes it from this owner's store, which already has it.
-     */
+    /** Not a Hilt screen, so the run step's view models are made here. */
     private val owner = object : ViewModelStoreOwner {
         override val viewModelStore = ViewModelStore()
     }
@@ -182,7 +176,6 @@ class RunStartConfirmTest {
         forgetAll()
         sessions.saveLogin(server.url, MARIA, IssuedTokens("access", "refresh", accessExpiresAtEpochSec = Long.MAX_VALUE / 2, issuedAtEpochSec = 0L))
         val factory = viewModelFactory {
-            initializer { AccountViewModel(sessions, auth, tripRepository) }
             initializer {
                 val arguments = mapOf(ARG_VEHICLE_ID to "4317", ARG_ROUTE_ID to "R1", ARG_ROUTE_NAME to "7")
                 RunsViewModel(SavedStateHandle(arguments), CatalogRepository(api), tripRepository, FileTripGeometryStore(geometryFile), noReports, auth, clock)
@@ -190,7 +183,6 @@ class RunStartConfirmTest {
             initializer { RunBoardTipViewModel(DriverTips(sessions, flags, scope)) }
         }
         val provider = ViewModelProvider.create(owner, factory)
-        provider[AccountViewModel::class]
         runs = provider[RunsViewModel::class]
         tip = provider[RunBoardTipViewModel::class]
     }
@@ -220,21 +212,19 @@ class RunStartConfirmTest {
     /** The run step as AppNav hosts it, on a board the server has answered. */
     private fun showRunBoard() {
         restoration.setContent {
-            CompositionLocalProvider(LocalViewModelStoreOwner provides owner) {
-                AppTheme {
-                    Surface(Modifier.fillMaxSize()) {
-                        RunsScreen(
-                            onTripStarted = {},
-                            onBack = {},
-                            onBusClick = null,
-                            onRouteClick = {},
-                            onChangeBus = {},
-                            onChooseAnotherRoute = {},
-                            onSessionEnded = {},
-                            viewModel = runs,
-                            tipViewModel = tip,
-                        )
-                    }
+            AppTheme {
+                Surface(Modifier.fillMaxSize()) {
+                    RunsScreen(
+                        onTripStarted = {},
+                        onBack = {},
+                        onBusClick = null,
+                        onRouteClick = {},
+                        onChangeBus = {},
+                        onChooseAnotherRoute = {},
+                        onSessionEnded = {},
+                        viewModel = runs,
+                        tipViewModel = tip,
+                    )
                 }
             }
         }

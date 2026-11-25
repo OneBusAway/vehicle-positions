@@ -144,8 +144,7 @@
     <string name="setup_step_run">Course</string>
     <string name="setup_clear_search">Effacer la recherche</string>
 
-    <!-- The account menu -->
-    <string name="account_menu">Compte</string>
+    <!-- Sign out -->
     <string name="account_sign_out">Se déconnecter</string>
     <string name="account_sign_out_title">Se déconnecter ?</string>
     <string name="account_sign_out_message">Le chauffeur suivant pourra se connecter sur ce téléphone.</string>

@@ -140,8 +140,7 @@
     <string name="setup_step_run">Kurs</string>
     <string name="setup_clear_search">Suche löschen</string>
 
-    <!-- The account menu -->
-    <string name="account_menu">Konto</string>
+    <!-- Sign out -->
     <string name="account_sign_out">Abmelden</string>
     <string name="account_sign_out_title">Abmelden?</string>
     <string name="account_sign_out_message">Dann kann sich die nächste Person auf diesem Handy anmelden.</string>

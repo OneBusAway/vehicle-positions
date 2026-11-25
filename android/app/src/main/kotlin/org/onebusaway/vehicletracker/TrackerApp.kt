@@ -5,6 +5,7 @@ import android.content.res.Configuration
 import android.os.LocaleList
 import dagger.hilt.android.HiltAndroidApp
 import org.onebusaway.vehicletracker.service.renameTripChannels
+import org.onebusaway.vehicletracker.ui.theme.themeController
 
 @HiltAndroidApp
 class TrackerApp : Application() {
@@ -12,6 +13,7 @@ class TrackerApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        themeController(this).start()
         locales = resources.configuration.locales
         // The app's language may have changed while it was not running, as a language chosen for the app alone in
         // Settings on Android 13 and up does.

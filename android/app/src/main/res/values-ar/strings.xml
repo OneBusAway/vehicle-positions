@@ -145,8 +145,7 @@
     <string name="setup_step_run">الدورة</string>
     <string name="setup_clear_search">محو البحث</string>
 
-    <!-- The account menu -->
-    <string name="account_menu">الحساب</string>
+    <!-- Sign out -->
     <string name="account_sign_out">تسجيل الخروج</string>
     <string name="account_sign_out_title">هل تريد تسجيل الخروج؟</string>
     <string name="account_sign_out_message">يمكن للسائق التالي تسجيل الدخول على هذا الهاتف.</string>

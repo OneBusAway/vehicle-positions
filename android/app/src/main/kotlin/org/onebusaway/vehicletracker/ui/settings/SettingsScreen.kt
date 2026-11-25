@@ -4,6 +4,7 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.provider.Settings
+import androidx.activity.compose.LocalActivity
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -56,6 +57,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import org.onebusaway.vehicletracker.R
 import org.onebusaway.vehicletracker.data.AppLog
+import org.onebusaway.vehicletracker.data.ThemeChoice
 import org.onebusaway.vehicletracker.ui.account.AccountUiState
 import org.onebusaway.vehicletracker.ui.account.AccountViewModel
 import org.onebusaway.vehicletracker.ui.account.SignOutDialog
@@ -79,7 +81,7 @@ private const val STACKS_FROM_TEXT = 1.3f
 
 /**
  * Settings, opened from the account button: whether this phone can report a trip, who is signed in and Sign out, then the
- * app's language, Help and the build. [onSignedOut] is the phone having forgotten the driver.
+ * app's language and theme, Help and the build. [onSignedOut] is the phone having forgotten the driver.
  */
 @Composable
 fun SettingsScreen(
@@ -92,6 +94,8 @@ fun SettingsScreen(
     val account by accountViewModel.uiState.collectAsStateWithLifecycle()
     val version by viewModel.version.collectAsStateWithLifecycle()
     val waiting by viewModel.waiting.collectAsStateWithLifecycle()
+    val theme by viewModel.theme.collectAsStateWithLifecycle()
+    val activity = LocalActivity.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     // A second tap while the text is being read would open a second share sheet.
@@ -110,10 +114,12 @@ fun SettingsScreen(
         readiness = readiness,
         account = account,
         version = version,
+        theme = theme,
         onBack = onBack,
         onOpenPhoneSettings = { openSettingsFor(readiness.state, context) },
         onSignOut = accountViewModel::onSignOut,
         onSignedOut = onSignedOut,
+        onChooseTheme = { if (viewModel.onChooseTheme(it)) activity?.recreate() },
         onHelp = onHelp,
         onShare = {
             if (sharing.compareAndSet(false, true)) {
@@ -159,10 +165,12 @@ internal fun SettingsContent(
     readiness: Readiness,
     account: AccountUiState,
     version: String,
+    theme: ThemeChoice,
     onBack: () -> Unit,
     onOpenPhoneSettings: () -> Unit,
     onSignOut: () -> Unit,
     onSignedOut: () -> Unit,
+    onChooseTheme: (ThemeChoice) -> Unit,
     onHelp: () -> Unit,
     onShare: () -> Unit,
 ) {
@@ -178,6 +186,7 @@ internal fun SettingsContent(
         ReadinessHeader(readiness, fold, onBack, onOpenPhoneSettings, Modifier.zIndex(1f))
         Column(
             Modifier
+                .clearOfHeader(fold)
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
                 .padding(start = 16.dp, top = 30.dp, end = 16.dp, bottom = 32.dp),
         ) {
@@ -192,11 +201,12 @@ internal fun SettingsContent(
                     } else {
                         shown.ownName
                     },
-                    place = GroupPlace.ONLY,
+                    place = GroupPlace.FIRST,
                     opens = true,
                     onClick = onClick,
                 )
             }
+            ThemeRow(theme, GroupPlace.LAST, onChooseTheme)
             GroupTitle(R.string.help_section_about)
             SettingsRow(R.drawable.ic_help, stringResource(R.string.help_title), null, GroupPlace.FIRST, opens = true, onClick = onHelp)
             SettingsRow(R.drawable.ic_share, stringResource(R.string.help_share), stringResource(R.string.help_share_detail), GroupPlace.MIDDLE, onClick = onShare)
@@ -254,7 +264,7 @@ internal fun breakable(address: String): String = address.replace("@", "@$MAY_BR
 
 /** A row of a group: its icon, its title over its value, and an arrow when it [opens] something in the app. */
 @Composable
-private fun SettingsRow(
+internal fun SettingsRow(
     @DrawableRes icon: Int,
     title: String,
     detail: String?,

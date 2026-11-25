@@ -10,7 +10,7 @@ import org.junit.Assert.assertTrue
 
 /** No text on screen is cut short or pushed off its side. */
 internal fun SemanticsNodeInteractionsProvider.assertNothingIsCutOff() {
-    val root = onRoot().fetchSemanticsNode().boundsInRoot
+    val width = onRoot().fetchSemanticsNode().size.width
     val texts = onAllNodes(keyIsDefined(SemanticsActions.GetTextLayoutResult), useUnmergedTree = true).fetchSemanticsNodes()
     assertTrue(texts.isNotEmpty())
     for (node in texts) {
@@ -21,7 +21,9 @@ internal fun SemanticsNodeInteractionsProvider.assertNothingIsCutOff() {
             val lines = 0 until layout.lineCount
             assertFalse("\"$words\" is cut short", layout.didOverflowHeight || lines.any(layout::isLineEllipsized))
             assertTrue("\"$words\" is wider than its place", lines.all { layout.getLineRight(it) <= layout.size.width + 0.5f })
-            assertTrue("\"$words\" runs off the side", node.boundsInRoot.left >= 0f && node.boundsInRoot.right <= root.right + 0.5f)
+            // Not boundsInRoot, which stops at the side it runs off.
+            val left = node.positionInRoot.x
+            assertTrue("\"$words\" runs off the side", left >= 0f && left + node.size.width <= width + 0.5f)
         }
     }
 }

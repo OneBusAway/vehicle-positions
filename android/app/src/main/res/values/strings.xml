@@ -158,7 +158,7 @@
     <string name="help_problem_signed_out">Reports have stopped. Sign in to go on. Your trip is still open.</string>
     <string name="help_problem_reports_paused">A notification. Open the app to keep reporting.</string>
 
-    <!-- Settings, opened from the account button on the steps of choosing a trip. -->
+    <!-- The title of Settings, and read out for the account button at the end of each setup screen's header, which opens it. -->
     <string name="settings_title">Settings</string>
     <!-- Large, at the top of Settings: whether this phone can report a trip. -->
     <string name="settings_ready">Ready to report</string>
@@ -180,6 +180,14 @@
     </plurals>
     <!-- Over the rows about the app itself, such as its language. -->
     <string name="settings_group_app">App</string>
+    <!-- The row that names the app's theme, and the title over the list of themes a tap on it opens. -->
+    <string name="settings_theme">Theme</string>
+    <!-- The themes, in that list and under Theme in the row. -->
+    <string name="theme_system">System</string>
+    <!-- Under System: the app is light or dark as the phone is. -->
+    <string name="theme_system_detail">Same as the phone</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
     <!-- Over the last rows of Settings: Help, Share diagnostics and the app's version, e.g. "0.1.0 (1)", under its label. -->
     <string name="help_section_about">About</string>
     <string name="help_version">Version</string>
@@ -203,8 +211,6 @@
     <!-- In a setup screen's search field, once something is typed. -->
     <string name="setup_clear_search">Clear search</string>
 
-    <!-- Read out for the account button at the end of each setup screen's header, which opens Settings. -->
-    <string name="account_menu">Account</string>
     <string name="account_sign_out">Sign out</string>
     <!-- Asked before signing out, since the phone is usually going to the next driver. -->
     <string name="account_sign_out_title">Sign out?</string>

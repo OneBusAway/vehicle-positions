@@ -27,8 +27,11 @@
         <meta-data
             android:name="android.content.APP_RESTRICTIONS"
             android:resource="@xml/app_restrictions" />
+        <!-- Kept through a change of theme, which Compose and the system bars follow by themselves, so the screen does not
+             go black until it is made again. -->
         <activity
             android:name=".MainActivity"
+            android:configChanges="uiMode"
             android:exported="true"
             android:launchMode="singleTask"
             android:theme="@style/Theme.VehicleTracker.Starting"

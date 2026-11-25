@@ -85,7 +85,7 @@ class SettingsOverOneVehicleTest {
     private fun openSettingsBeforeTheAssignmentsLand() {
         // Waited for through the rule, which only draws the app while the test waits on it.
         compose.waitUntil(TIMEOUT_MS) { server.heldArrived.count == 0L }
-        val account = hasContentDescription(string(R.string.account_menu))
+        val account = hasContentDescription(string(R.string.settings_title))
         compose.waitUntil(TIMEOUT_MS) { compose.onAllNodes(account).fetchSemanticsNodes().isNotEmpty() }
         compose.waitForIdle()
         compose.onNode(account).performClick()

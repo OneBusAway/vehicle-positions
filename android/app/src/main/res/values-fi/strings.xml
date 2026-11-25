@@ -141,8 +141,7 @@
     <string name="setup_step_run">Vuoro</string>
     <string name="setup_clear_search">Tyhjennä haku</string>
 
-    <!-- The account menu -->
-    <string name="account_menu">Tili</string>
+    <!-- Sign out -->
     <string name="account_sign_out">Kirjaudu ulos</string>
     <string name="account_sign_out_title">Kirjaudutaanko ulos?</string>
     <string name="account_sign_out_message">Seuraava kuljettaja voi kirjautua sisään tällä puhelimella.</string>

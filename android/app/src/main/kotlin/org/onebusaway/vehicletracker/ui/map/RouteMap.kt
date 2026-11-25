@@ -38,6 +38,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -175,12 +176,28 @@ fun RouteMap(
     controlsPadding: PaddingValues,
     modifier: Modifier = Modifier,
 ) {
-    val context = LocalContext.current
+    // A map draws its colours once, so a change of theme is another map.
     val dark = isSystemInDarkTheme()
+    key(dark) {
+        ThemedRouteMap(dark, geometry, adherence, mapFile, vehicleRing, contentPadding, controlsPadding, modifier)
+    }
+}
+
+/** One map for as long as it is up, and the theme [dark] with it, so the colours read here hold for the map's whole life. */
+@Composable
+private fun ThemedRouteMap(
+    dark: Boolean,
+    geometry: TripGeometry,
+    adherence: Adherence?,
+    mapFile: MapFileState,
+    vehicleRing: Int,
+    contentPadding: PaddingValues,
+    controlsPadding: PaddingValues,
+    modifier: Modifier,
+) {
+    val context = LocalContext.current
     val labelColor = MaterialTheme.colorScheme.onSurface.toArgb()
     val haloColor = MaterialTheme.colorScheme.surface.toArgb()
-    // One map for as long as the screen is up. A theme change recreates the activity, so the
-    // colours read here hold for the map's whole life.
     val controller = remember { RouteMapController(context, dark, labelColor, haloColor) }
 
     val lifecycle = LocalLifecycleOwner.current.lifecycle

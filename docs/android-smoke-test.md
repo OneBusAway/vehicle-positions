@@ -261,15 +261,17 @@ OTHER_REFRESH=$(curl -s -X POST "$BASE/api/v1/auth/login" \
   | python3 -c 'import sys,json;print(json.load(sys.stdin)["refresh_token"])')
 ```
 
-1. On **Choose a run**, tap **Account** (the person at the top right).
+1. On **Choose a run**, tap the account button (the person at the top right).
 
    **Expected outcome:** **Settings** says whether the phone can report a trip
    (**Ready to report** once Check 1 has granted location), then
    `driver@example.com` and the server (`10.0.2.2:8081` on an emulator) beside
-   **Sign out**. At the end is **Version** `0.1.0 (1)`. Tap **Sign out**: "Sign
-   out?" with "The next driver can sign in on this phone." Tap **Sign out**
-   again: **Sign in** opens with the server as one line and the email empty.
-   Back closes the app. The server log has the logout:
+   **Sign out**. At the end is **Version** `0.1.0 (1)`. Tap **Theme**, then
+   **Dark**: the app is dark at once, with **Settings** still open. Put it back
+   to **System**. Tap **Sign out**: "Sign out?" with "The next driver can sign
+   in on this phone." Tap **Sign out** again: **Sign in** opens with the server
+   as one line and the email empty. Back closes the app. The server log has the
+   logout:
 
    ```bash
    grep '"path":"/api/v1/auth/logout"' /tmp/vt-server.log

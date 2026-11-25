@@ -141,8 +141,7 @@
     <string name="setup_step_run">ዙር</string>
     <string name="setup_clear_search">ፍለጋውን ያጽዱ</string>
 
-    <!-- The account menu -->
-    <string name="account_menu">መለያ</string>
+    <!-- Sign out -->
     <string name="account_sign_out">ከመለያ ይውጡ</string>
     <string name="account_sign_out_title">ከመለያ ይወጣሉ?</string>
     <string name="account_sign_out_message">ቀጣዩ ሹፌር በዚህ ስልክ መግባት ይችላል።</string>

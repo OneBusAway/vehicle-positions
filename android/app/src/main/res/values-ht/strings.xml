@@ -143,8 +143,7 @@
     <string name="setup_step_run">Kous</string>
     <string name="setup_clear_search">Efase rechèch la</string>
 
-    <!-- The account menu -->
-    <string name="account_menu">Kont</string>
+    <!-- Sign out -->
     <string name="account_sign_out">Dekonekte</string>
     <string name="account_sign_out_title">Dekonekte?</string>
     <string name="account_sign_out_message">Pwochen chofè a ka konekte sou telefòn sa a.</string>

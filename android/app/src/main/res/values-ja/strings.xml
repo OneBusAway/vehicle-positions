@@ -140,8 +140,7 @@
     <string name="setup_step_run">便</string>
     <string name="setup_clear_search">検索をクリア</string>
 
-    <!-- The account menu -->
-    <string name="account_menu">アカウント</string>
+    <!-- Sign out -->
     <string name="account_sign_out">ログアウト</string>
     <string name="account_sign_out_title">ログアウトしますか？</string>
     <string name="account_sign_out_message">次の運転士がこのスマートフォンでログインできるようになります。</string>
