@@ -88,8 +88,9 @@ class RepositoriesTest {
     }
 
     // A backlog job that ran while nobody was signed in to the queue's account gave up, and nothing else would bring it
-    // back until another fix was queued.
-    @Test fun `signing in schedules the backlog upload when the queue holds that driver's fixes`() = runTest {
+    // back until another fix was queued. One the server kept refusing once the session was over waits longer each time,
+    // in the end for hours, and is put back to no wait.
+    @Test fun `signing in uploads that driver's queued fixes at once, whatever a waiting job's wait`() = runTest {
         val server = MockWebServer().apply { start() }
         repeat(3) { server.enqueue(MockResponse().setBody("""{"access_token":"jwt","refresh_token":"r","expires_in":900}""")) }
         server.enqueue(MockResponse().setResponseCode(401).setBody("""{"error":"invalid email or password"}"""))
@@ -99,19 +100,19 @@ class RepositoriesTest {
         val url = server.url("/").toString()
 
         repo.login(url, "a@example.com", "pw")
-        assertEquals("nothing queued", 0, scheduler.scheduled)
+        assertEquals("nothing queued", 0, scheduler.scheduledAfresh)
 
         queue.add(queuedFix("bus-1"))
         repo.login(url, " A@example.com", "pw")
-        assertEquals("the same driver, with fixes queued", 1, scheduler.scheduled)
-        assertEquals("a waiting or running job is left as it is", 0, scheduler.scheduledAfresh)
+        assertEquals("the same driver, with fixes queued", 1, scheduler.scheduledAfresh)
 
         repo.login(url, "b@example.com", "pw")
-        assertEquals("another driver: the fixes were dropped", 1, scheduler.scheduled)
+        assertEquals("another driver: the fixes were dropped", 1, scheduler.scheduledAfresh)
 
         queue.add(queuedFix("bus-1"))
         assertTrue(repo.login(url, "b@example.com", "bad").isFailure)
-        assertEquals("a sign-in that failed", 1, scheduler.scheduled)
+        assertEquals("a sign-in that failed", 1, scheduler.scheduledAfresh)
+        assertEquals("never leaving a wait in place", 0, scheduler.scheduled)
         server.shutdown()
     }
 
@@ -129,7 +130,7 @@ class RepositoriesTest {
 
         assertTrue(result.isSuccess)
         assertEquals("jwt", sessions.session.first().token)
-        assertEquals(0, scheduler.scheduled)
+        assertEquals(0, scheduler.scheduled + scheduler.scheduledAfresh)
         server.shutdown()
     }
 

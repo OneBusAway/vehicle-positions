@@ -39,8 +39,10 @@ class AuthRepository @Inject constructor(
             sessionStore.saveLogin(serverUrl, email, resp.issuedAt(clock()))
             offlineQueue.claimFor(offlineQueueAccount(serverUrl, email))
             // The fixes left in the queue now are this driver's. A backlog job that ran while nobody was signed in to
-            // them gave up and won't run again until another fix is queued, which may be the next trip's.
-            backlogScheduler.scheduleIfQueued(offlineQueue)
+            // them gave up and won't run again until another fix is queued, which may be the next trip's. One that the
+            // server refused while the session was over may be hours into its wait, and none can be getting through:
+            // until now no session was good.
+            backlogScheduler.scheduleIfQueued(offlineQueue, afresh = true)
             Result.success(Unit)
         }
     } catch (e: CancellationException) {

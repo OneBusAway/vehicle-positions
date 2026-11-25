@@ -34,17 +34,22 @@ interface BacklogUploadScheduler {
     fun schedule()
 
     /**
-     * For when the server has just answered an upload. JobScheduler makes a job that keeps failing wait longer each
-     * time, in the end for hours, and [schedule] leaves that wait in place. This puts a new job in its place, which
-     * starts with no wait. It also stops a job that is running, so the caller checks [HistoryUploader.jobRunning].
+     * For when the server has just answered an upload, or a sign-in. JobScheduler makes a job that keeps failing wait
+     * longer each time, in the end for hours, and [schedule] leaves that wait in place. This puts a new job in its
+     * place, which starts with no wait. It also stops a job that is running, so a caller with one that may be getting
+     * through checks [HistoryUploader.jobRunning].
      */
     fun scheduleAfresh()
 }
 
-/** [BacklogUploadScheduler.schedule], when [queue] holds fixes from before, for which no job may be left. */
-suspend fun BacklogUploadScheduler.scheduleIfQueued(queue: OfflineFixQueue) {
+/**
+ * [BacklogUploadScheduler.schedule], when [queue] holds fixes from before, for which no job may be left, or
+ * [BacklogUploadScheduler.scheduleAfresh] when [afresh], for which one may be left that waits for hours.
+ */
+suspend fun BacklogUploadScheduler.scheduleIfQueued(queue: OfflineFixQueue, afresh: Boolean = false) {
     try {
-        if (queue.oldest(1).isNotEmpty()) schedule()
+        if (queue.oldest(1).isEmpty()) return
+        if (afresh) scheduleAfresh() else schedule()
     } catch (e: IOException) {
         // The next live report still uploads a batch.
         AppLog.w(TAG, "Could not read the offline queue", e)
