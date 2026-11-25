@@ -10,8 +10,12 @@ import (
 
 // GetUserByEmail fetches the user with this email in any case: both sign-ins,
 // reset-admin and the CSV import find an account this way.
-// Returns ErrUserNotFound if no user has the email.
+// Returns ErrUserNotFound if no user has the email, as none has one Postgres
+// can't hold.
 func (s *Store) GetUserByEmail(ctx context.Context, email string) (*User, error) {
+	if !storableText(email) {
+		return nil, ErrUserNotFound
+	}
 	row, err := s.queries.GetUserByEmail(ctx, email)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
