@@ -153,6 +153,13 @@ SELECT user_id, vehicle_id
 FROM user_vehicles
 WHERE user_id = $1 AND vehicle_id = $2;
 
+-- name: ListTripSpans :many
+-- When a driver ran trips on a vehicle that had not ended before a time.
+SELECT start_time, end_time
+FROM trips
+WHERE user_id = sqlc.arg(user_id) AND vehicle_id = sqlc.arg(vehicle_id)
+  AND (end_time IS NULL OR end_time >= sqlc.arg(ended_since));
+
 -- name: CheckUserVehicleAssignmentForShare :one
 -- FOR SHARE makes an unassign wait until the caller's transaction commits, so
 -- the unassign sees a trip the caller starts and refuses, rather than leaving

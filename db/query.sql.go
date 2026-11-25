@@ -2022,6 +2022,45 @@ func (q *Queries) ListTrails(ctx context.Context, tripIds []int64) ([]ListTrails
 	return items, nil
 }
 
+const listTripSpans = `-- name: ListTripSpans :many
+SELECT start_time, end_time
+FROM trips
+WHERE user_id = $1 AND vehicle_id = $2
+  AND (end_time IS NULL OR end_time >= $3)
+`
+
+type ListTripSpansParams struct {
+	UserID     int64
+	VehicleID  string
+	EndedSince pgtype.Timestamptz
+}
+
+type ListTripSpansRow struct {
+	StartTime pgtype.Timestamptz
+	EndTime   pgtype.Timestamptz
+}
+
+// When a driver ran trips on a vehicle that had not ended before a time.
+func (q *Queries) ListTripSpans(ctx context.Context, arg ListTripSpansParams) ([]ListTripSpansRow, error) {
+	rows, err := q.db.Query(ctx, listTripSpans, arg.UserID, arg.VehicleID, arg.EndedSince)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTripSpansRow
+	for rows.Next() {
+		var i ListTripSpansRow
+		if err := rows.Scan(&i.StartTime, &i.EndTime); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUserVehicleIDsAmong = `-- name: ListUserVehicleIDsAmong :many
 SELECT vehicle_id
 FROM user_vehicles

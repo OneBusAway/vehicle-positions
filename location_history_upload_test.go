@@ -326,3 +326,68 @@ func TestStore_ListTripLocations_BacklogFixInFirstSecond(t *testing.T) {
 	require.Len(t, pts, 1, "the backlog fix from the trip's first second")
 	assert.Equal(t, 1.0, pts[0].Latitude)
 }
+
+// TestStore_SaveLocationHistory_AfterReassignment: dispatch has moved the driver
+// to another vehicle by the time their phone is back in coverage. What they
+// recorded on the trips they ran is theirs to save, and nothing else is.
+func TestStore_SaveLocationHistory_AfterReassignment(t *testing.T) {
+	store := newTestStore(t)
+	clearTripTestData(t, store)
+	t.Cleanup(func() { clearTripTestData(t, store) })
+	ctx := context.Background()
+	userID := setupTripUser(t, store, "Moved Driver", "moved@test.com", "bus-old", "Bus Old")
+	other := setupTripUser(t, store, "Other Driver", "other@test.com", "bus-other", "Bus Other")
+	now := time.Now().Truncate(time.Second)
+	// Two trips on the vehicle, from 4 to 3 hours ago and from 2 to 1.
+	run := func(driver int64, vehicle string, from, to time.Duration) {
+		t.Helper()
+		trip, err := store.StartTrip(ctx, driver, vehicle, "R1", "T1")
+		require.NoError(t, err)
+		_, err = store.pool.Exec(ctx, "UPDATE trips SET start_time = $2, end_time = $3, status = 'completed' WHERE id = $1", trip.ID, now.Add(-from), now.Add(-to))
+		require.NoError(t, err)
+	}
+	run(userID, "bus-old", 4*time.Hour, 3*time.Hour)
+	run(userID, "bus-old", 2*time.Hour, time.Hour)
+	run(other, "bus-other", 2*time.Hour, time.Hour)
+	require.NoError(t, store.DeleteAssignment(asTestAdmin(), userID, "bus-old"))
+
+	point := func(vehicle string, ago time.Duration) *LocationReport {
+		return &LocationReport{VehicleID: vehicle, DriverID: strconv.FormatInt(userID, 10), Latitude: 1, Longitude: 2, Timestamp: now.Add(-ago).Unix()}
+	}
+	save := func(vehicle string, ago ...time.Duration) (int, error) {
+		points := make([]*LocationReport, len(ago))
+		for i, a := range ago {
+			points[i] = point(vehicle, a)
+		}
+		return store.SaveLocationHistory(ctx, userID, vehicle, points)
+	}
+	tests := []struct {
+		name    string
+		vehicle string
+		ago     []time.Duration
+		saved   int
+		err     error
+	}{
+		{"during both trips", "bus-old", []time.Duration{200 * time.Minute, 90 * time.Minute}, 2, nil},
+		{"at a trip's ends, by a phone whose clock is off by 5 minutes", "bus-old", []time.Duration{4*time.Hour + 5*time.Minute, 3*time.Hour - 5*time.Minute}, 2, nil},
+		{"past that at each end", "bus-old", []time.Duration{4*time.Hour + 6*time.Minute, 3*time.Hour - 6*time.Minute, 55*time.Minute - time.Second}, 0, ErrNotAssigned},
+		{"between the trips, kept out of a batch with one during a trip", "bus-old", []time.Duration{150 * time.Minute, 100 * time.Minute}, 1, nil},
+		{"none", "bus-old", nil, 0, ErrNotAssigned},
+		{"another driver's trip", "bus-other", []time.Duration{90 * time.Minute}, 0, ErrNotAssigned},
+		{"a vehicle there is none of", "bus-none", []time.Duration{90 * time.Minute}, 0, ErrNotAssigned},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			saved, err := save(tt.vehicle, tt.ago...)
+			assert.ErrorIs(t, err, tt.err)
+			assert.Equal(t, tt.saved, saved)
+		})
+	}
+
+	// Assigned again, anything goes in as before.
+	_, err := store.CreateAssignment(asTestAdmin(), userID, "bus-old")
+	require.NoError(t, err)
+	saved, err := save("bus-old", 30*time.Minute)
+	require.NoError(t, err)
+	assert.Equal(t, 1, saved)
+}
