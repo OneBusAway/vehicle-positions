@@ -5,7 +5,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import org.onebusaway.vehicletracker.ui.account.AccountUiState
 
 class AppNavTest {
     @Test fun `the one-bus skip takes the bus step off the back stack`() {
@@ -14,33 +13,20 @@ class AppNavTest {
         assertTrue("the bus step itself goes too, so Back leaves the flow", options.isPopUpToInclusive())
     }
 
-    private val signedIn = AccountUiState(email = "d@example.com", server = "tracker.example.org")
-
     @Test fun `the vehicle step the app opened skips, and the one the driver asked for doesn't`() {
         assertTrue(
             "opened by itself, after sign-in or a trip",
-            skipsOnlyVehicle(ROUTE_VEHICLES, signedIn, onTop = true),
+            skipsOnlyVehicle(ROUTE_VEHICLES, onTop = true),
         )
         assertFalse(
             "opened by Change vehicle, so it shows the one vehicle",
-            skipsOnlyVehicle(ROUTE_VEHICLES_CHOSEN, signedIn, onTop = true),
+            skipsOnlyVehicle(ROUTE_VEHICLES_CHOSEN, onTop = true),
         )
-        assertFalse(skipsOnlyVehicle(null, signedIn, onTop = true))
+        assertFalse(skipsOnlyVehicle(null, onTop = true))
     }
 
-    @Test fun `the vehicle step doesn't skip while Help is over it`() {
-        assertFalse("the skip would close Help", skipsOnlyVehicle(ROUTE_VEHICLES, signedIn, onTop = false))
-    }
-
-    @Test fun `the vehicle step doesn't skip once Sign out is confirmed`() {
-        assertFalse(
-            "still waiting on the server",
-            skipsOnlyVehicle(ROUTE_VEHICLES, signedIn.copy(signingOut = true), onTop = true),
-        )
-        assertFalse(
-            "already forgotten, before Sign in opens",
-            skipsOnlyVehicle(ROUTE_VEHICLES, signedIn.copy(signingOut = true, signedOut = true), onTop = true),
-        )
+    @Test fun `the vehicle step doesn't skip while Settings is over it`() {
+        assertFalse("the skip would close Settings, or start a trip for a driver signing out", skipsOnlyVehicle(ROUTE_VEHICLES, onTop = false))
     }
 
     @Test fun `leaving for Sign in clears the whole flow`() {

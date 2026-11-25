@@ -30,8 +30,7 @@ import org.onebusaway.vehicletracker.data.ReportsWaiting
 import org.onebusaway.vehicletracker.data.TrackingProblem
 import org.onebusaway.vehicletracker.data.TrackingState
 import org.onebusaway.vehicletracker.data.WaitingOutlook
-import org.onebusaway.vehicletracker.ui.help.HelpAbout
-import org.onebusaway.vehicletracker.ui.help.HelpContent
+import org.onebusaway.vehicletracker.ui.help.HelpScreen
 import org.onebusaway.vehicletracker.ui.help.waitingHelp
 import org.onebusaway.vehicletracker.ui.theme.AppTheme
 import org.onebusaway.vehicletracker.ui.tracking.StatusArea
@@ -153,7 +152,7 @@ class ReportsWaitingCardTest {
                         StatusArea(model, TrackingProblem.NONE, onSignIn = {}, waiting = ReportsWaiting(3, outlook))
                     }
                     // Tall enough for every row to be on the page at once.
-                    Box(Modifier.requiredHeight(3000.dp)) { HelpContent(HelpAbout("0.1.0 (1)", "tracker.example.org"), {}, {}, {}) }
+                    Box(Modifier.requiredHeight(3000.dp)) { HelpScreen({}, {}) }
                 }
             }
         }

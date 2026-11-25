@@ -6,6 +6,8 @@ import org.onebusaway.vehicletracker.R
 import org.onebusaway.vehicletracker.data.TrackingProblem
 import org.onebusaway.vehicletracker.data.WaitingOutlook
 import org.onebusaway.vehicletracker.engine.AdherenceStatus
+import org.onebusaway.vehicletracker.ui.components.GroupPlace
+import org.onebusaway.vehicletracker.ui.components.groupPlace
 import org.onebusaway.vehicletracker.ui.theme.StatusTone
 import org.onebusaway.vehicletracker.ui.tracking.StatusCardModel
 
@@ -114,25 +116,9 @@ internal fun waitingHelp(outlook: WaitingOutlook): CardStatusHelp = when (outloo
     WaitingOutlook.NEVER -> CardStatusHelp.REPORTS_WONT_SEND
 }
 
-/** Where a row sits in its group, which decides its corners: round on the group's outside, tight between rows. */
-internal enum class GroupPlace { FIRST, MIDDLE, LAST }
-
-private fun groupPlace(index: Int, size: Int): GroupPlace = when (index) {
-    0 -> GroupPlace.FIRST
-    size - 1 -> GroupPlace.LAST
-    else -> GroupPlace.MIDDLE
-}
-
 internal enum class HelpSection(@StringRes val title: Int) {
     STATUS(R.string.help_section_status),
     PROBLEMS(R.string.help_section_problems),
-    ABOUT(R.string.help_section_about),
-}
-
-/** Which fact an About row shows. The values are read when the page is drawn: the server's can arrive a little late. */
-internal enum class AboutFact(@StringRes val label: Int, @DrawableRes val icon: Int) {
-    VERSION(R.string.help_version, R.drawable.ic_info),
-    SERVER(R.string.help_server, R.drawable.ic_dns),
 }
 
 /**
@@ -146,12 +132,6 @@ internal sealed interface HelpItem {
     data object WelcomeAgain : HelpItem {
         override val key = "welcome"
         override val contentType = "welcome"
-    }
-
-    /** The app's language, under the welcome row, where a driver who cannot read the page's language finds it. */
-    data object Language : HelpItem {
-        override val key = "language"
-        override val contentType = "language"
     }
 
     data class Section(val section: HelpSection) : HelpItem {
@@ -168,27 +148,13 @@ internal sealed interface HelpItem {
         override val key = "problem-${help.name}"
         override val contentType = "problem"
     }
-
-    data class About(val fact: AboutFact, val place: GroupPlace) : HelpItem {
-        override val key = "about-${fact.name}"
-        override val contentType = "about"
-    }
-
-    data object Share : HelpItem {
-        override val key = "share"
-        override val contentType = "share"
-    }
 }
 
 /** The whole page, top to bottom, built once. */
 internal val helpPage: List<HelpItem> = buildList {
     add(HelpItem.WelcomeAgain)
-    add(HelpItem.Language)
     add(HelpItem.Section(HelpSection.STATUS))
     CardStatusHelp.entries.forEachIndexed { i, help -> add(HelpItem.Status(help, groupPlace(i, CardStatusHelp.entries.size))) }
     add(HelpItem.Section(HelpSection.PROBLEMS))
     ProblemHelp.entries.forEachIndexed { i, help -> add(HelpItem.Problem(help, groupPlace(i, ProblemHelp.entries.size))) }
-    add(HelpItem.Section(HelpSection.ABOUT))
-    AboutFact.entries.forEachIndexed { i, fact -> add(HelpItem.About(fact, groupPlace(i, AboutFact.entries.size))) }
-    add(HelpItem.Share)
 }

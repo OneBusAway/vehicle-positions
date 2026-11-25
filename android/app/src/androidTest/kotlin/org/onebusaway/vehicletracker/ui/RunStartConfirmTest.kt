@@ -231,7 +231,6 @@ class RunStartConfirmTest {
                             onChangeBus = {},
                             onChooseAnotherRoute = {},
                             onSessionEnded = {},
-                            onSignedOut = {},
                             viewModel = runs,
                             tipViewModel = tip,
                         )

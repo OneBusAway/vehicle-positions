@@ -66,9 +66,9 @@ private val MarkerSize = 44.dp
 private val AllowedShape = RoundedCornerShape(14.dp)
 
 /** A row's icon, title and why, as the checklist shows them before anything is answered. */
-private class RowText(@DrawableRes val icon: Int, @StringRes val title: Int, @StringRes val why: Int)
+internal class RowText(@DrawableRes val icon: Int, @StringRes val title: Int, @StringRes val why: Int)
 
-private fun textOf(row: PermissionRow): RowText = when (row) {
+internal fun textOf(row: PermissionRow): RowText = when (row) {
     PermissionRow.LOCATION -> RowText(R.drawable.ic_location_on, R.string.preflight_location, R.string.preflight_location_why)
     PermissionRow.PRECISE -> RowText(R.drawable.ic_my_location, R.string.preflight_precise, R.string.preflight_precise_why)
     PermissionRow.BACKGROUND -> RowText(R.drawable.ic_schedule_outline, R.string.preflight_background, R.string.preflight_background_why)

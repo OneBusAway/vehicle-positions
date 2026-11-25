@@ -1296,8 +1296,8 @@ scheme gets `https://` added, but one from these three sources doesn't.
 A new address applies at the **next sign-in**. A phone that is signed in keeps
 reporting to the server it signed in to, because its sign-in and its trip belong
 to that server. To move a signed-in phone, the driver ends any trip, signs out
-(**Sign out** in the account menu at the top right of the vehicle, route and run
-steps) and signs in again.
+(**Sign out**, behind the account button at the top right of the vehicle, route and
+run steps) and signs in again.
 
 ### 13.1 Device management (MDM)
 

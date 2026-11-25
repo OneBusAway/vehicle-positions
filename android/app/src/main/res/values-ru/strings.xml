@@ -144,7 +144,6 @@
 
     <!-- The account menu -->
     <string name="account_menu">Аккаунт</string>
-    <string name="account_version">Версия %1$s</string>
     <string name="account_sign_out">Выйти</string>
     <string name="account_sign_out_title">Выйти из аккаунта?</string>
     <string name="account_sign_out_message">Следующий водитель сможет войти на этом телефоне.</string>

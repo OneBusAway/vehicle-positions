@@ -42,7 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.onebusaway.vehicletracker.R
-import org.onebusaway.vehicletracker.ui.account.AccountMenu
+import org.onebusaway.vehicletracker.ui.account.AccountButton
 import org.onebusaway.vehicletracker.ui.components.DelayedSpinner
 import org.onebusaway.vehicletracker.ui.components.EmptyState
 import org.onebusaway.vehicletracker.ui.components.ScrolledUnderDivider
@@ -57,7 +57,7 @@ private val RowBadgeShape = RoundedCornerShape(10.dp)
 
 /**
  * [onBack] and [onBusClick] are null when the bus step was skipped: there is no bus step to go back to.
- * [onSessionEnded] is the server having ended the session, and [onSignedOut] the driver having signed out.
+ * [onSessionEnded] is the server having ended the session.
  */
 @Composable
 fun RoutesScreen(
@@ -66,7 +66,6 @@ fun RoutesScreen(
     onBusClick: (() -> Unit)?,
     onRouteSelected: (RouteItem) -> Unit,
     onSessionEnded: () -> Unit,
-    onSignedOut: () -> Unit,
     viewModel: RoutesViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -80,7 +79,7 @@ fun RoutesScreen(
         onQueryChange = viewModel::onQueryChange,
         onRetry = viewModel::retry,
         onSessionEnded = onSessionEnded,
-        account = { AccountMenu(onSignedOut) },
+        account = { AccountButton() },
     )
 }
 

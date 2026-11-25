@@ -55,9 +55,7 @@ import org.onebusaway.vehicletracker.di.EpochSecondsClock
 import org.onebusaway.vehicletracker.di.ServiceAnnounceGrace
 import org.onebusaway.vehicletracker.service.BacklogUploadScheduler
 import org.onebusaway.vehicletracker.service.scheduleIfQueued
-import org.onebusaway.vehicletracker.ui.account.AccountUiState
-import org.onebusaway.vehicletracker.ui.account.AccountViewModel
-import org.onebusaway.vehicletracker.ui.account.LocalOpenHelp
+import org.onebusaway.vehicletracker.ui.account.LocalOpenSettings
 import org.onebusaway.vehicletracker.ui.help.HelpScreen
 import org.onebusaway.vehicletracker.ui.login.LoginScreen
 import org.onebusaway.vehicletracker.ui.resume.ResumeShiftScreen
@@ -65,6 +63,7 @@ import org.onebusaway.vehicletracker.ui.routes.RouteItem
 import org.onebusaway.vehicletracker.ui.routes.RoutesScreen
 import org.onebusaway.vehicletracker.ui.routes.routeColorHex
 import org.onebusaway.vehicletracker.ui.runs.RunsScreen
+import org.onebusaway.vehicletracker.ui.settings.SettingsScreen
 import org.onebusaway.vehicletracker.ui.theme.SharedAxisSlide
 import org.onebusaway.vehicletracker.ui.theme.fadeThroughIn
 import org.onebusaway.vehicletracker.ui.theme.fadeThroughOut
@@ -96,7 +95,9 @@ private const val ROUTE_ROUTES = "trip/{vehicleId}"
 private const val ROUTE_RUNS = "trip/{vehicleId}/routes/{routeId}?name={routeName}&color={routeColor}&text={routeTextColor}"
 private const val ROUTE_TRACKING = "tracking"
 private const val ROUTE_RESUME = "resume"
-// Help, from the account menu on the steps of choosing a trip, and the welcome opened again from it.
+// Settings, from the account button on the steps of choosing a trip, Help from Settings, and the welcome opened again
+// from Help.
+internal const val ROUTE_SETTINGS = "settings"
 internal const val ROUTE_HELP = "help"
 internal const val ROUTE_WELCOME_AGAIN = "welcome_again"
 // Not private: RunsViewModel reads them out of its SavedStateHandle, and the names have to
@@ -148,11 +149,17 @@ private fun AnimatedContentTransitionScope<NavBackStackEntry>.onTowardsBuses(): 
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.toOrFromTracking(): Boolean =
     initialState.destination.route == ROUTE_TRACKING || targetState.destination.route == ROUTE_TRACKING
 
-private val HELP_ROUTES = setOf(ROUTE_HELP, ROUTE_WELCOME_AGAIN)
+private val SETTINGS_ROUTES = setOf(ROUTE_SETTINGS, ROUTE_HELP, ROUTE_WELCOME_AGAIN)
 
-/** Help is a step on from the step it opened over, and the welcome a step on from Help. */
-private fun AnimatedContentTransitionScope<NavBackStackEntry>.toOrFromHelp(): Boolean =
-    initialState.destination.route in HELP_ROUTES || targetState.destination.route in HELP_ROUTES
+/**
+ * Whether one step here opened the other: Settings is a step on from the step it opened over, Help from Settings, and the
+ * welcome from Help. Not signing out, which leaves them all for Sign in.
+ */
+private fun AnimatedContentTransitionScope<NavBackStackEntry>.toOrFromSettings(): Boolean {
+    val from = initialState.destination.route
+    val to = targetState.destination.route
+    return from != ROUTE_LOGIN && to != ROUTE_LOGIN && (from in SETTINGS_ROUTES || to in SETTINGS_ROUTES)
+}
 
 /** Whether the bus step is behind this screen. It is not once the one-bus skip has taken its place. */
 private fun NavController.hasBusStep(): Boolean = listOf(ROUTE_VEHICLES, ROUTE_VEHICLES_CHOSEN).any { route ->
@@ -176,12 +183,10 @@ internal fun NavController.toBusStep() {
 
 /**
  * Only the step the app opened by itself skips. One the driver asked for shows the one vehicle, rather than bouncing
- * back. Nor does it skip once the driver has confirmed Sign out: the assignments can land behind the Sign out dialog,
- * and the skip would take a driver who is signing out on to the route step. Nor while the step is not [onTop]: the
- * assignments can land as Help opens over it, and the skip would close Help.
+ * back. Nor does it skip while the step is not [onTop]: the assignments can land as Settings opens over it, and the skip
+ * would close Settings, or take a driver who is signing out there on to the route step.
  */
-internal fun skipsOnlyVehicle(route: String?, account: AccountUiState, onTop: Boolean): Boolean =
-    route == ROUTE_VEHICLES && onTop && !account.signingOut
+internal fun skipsOnlyVehicle(route: String?, onTop: Boolean): Boolean = route == ROUTE_VEHICLES && onTop
 
 /**
  * How the app leaves the bus step when the driver has only one bus: the route step takes its place. Left on the back
@@ -289,22 +294,22 @@ private fun ClearOfSystemBars(content: @Composable () -> Unit) {
     Box(Modifier.safeDrawingPadding()) { content() }
 }
 
-/** A step of choosing a trip, whose account menu opens Help. A tap while the step is leaving does nothing. */
+/** A step of choosing a trip, whose account button opens Settings. A tap while the step is leaving does nothing. */
 @Composable
 private fun PickerStep(navController: NavController, content: @Composable () -> Unit) {
-    val openHelp = dropUnlessResumed { navController.navigate(ROUTE_HELP) }
-    CompositionLocalProvider(LocalOpenHelp provides openHelp) { ClearOfSystemBars(content) }
+    val openSettings = dropUnlessResumed { navController.navigate(ROUTE_SETTINGS) }
+    CompositionLocalProvider(LocalOpenSettings provides openSettings) { ClearOfSystemBars(content) }
 }
 
-/** Going back a setup step, out of Help, or out of Tracking; null for the screens that keep the default transitions. */
+/** Going back a setup step, out of Settings, or out of Tracking; null for the screens that keep the default transitions. */
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.popEnter(slidePx: Int): EnterTransition? = when {
-    betweenSetupSteps() || toOrFromHelp() -> sharedAxisIn(SlideDirection.End, slidePx)
+    betweenSetupSteps() || toOrFromSettings() -> sharedAxisIn(SlideDirection.End, slidePx)
     toOrFromTracking() -> fadeThroughIn()
     else -> null
 }
 
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.popExit(slidePx: Int): ExitTransition? = when {
-    betweenSetupSteps() || toOrFromHelp() -> sharedAxisOut(SlideDirection.End, slidePx)
+    betweenSetupSteps() || toOrFromSettings() -> sharedAxisOut(SlideDirection.End, slidePx)
     toOrFromTracking() -> fadeThroughOut()
     else -> null
 }
@@ -318,7 +323,7 @@ fun AppNav(modifier: Modifier = Modifier, navViewModel: AppNavViewModel = hiltVi
 
     val navController = rememberNavController()
     val slidePx = with(LocalDensity.current) { SharedAxisSlide.roundToPx() }
-    // Signing in, the steps of choosing a trip and Help slide along one axis; starting the trip and leaving it fade
+    // Signing in, the steps of choosing a trip and Settings slide along one axis; starting the trip and leaving it fade
     // through instead, because they change the task. The rest keep the defaults. The back gesture previews the same pop
     // it ends in.
     NavHost(
@@ -327,14 +332,14 @@ fun AppNav(modifier: Modifier = Modifier, navViewModel: AppNavViewModel = hiltVi
         modifier = modifier,
         enterTransition = {
             when {
-                betweenSetupSteps() || onTowardsBuses() || toOrFromHelp() -> sharedAxisIn(SlideDirection.Start, slidePx)
+                betweenSetupSteps() || onTowardsBuses() || toOrFromSettings() -> sharedAxisIn(SlideDirection.Start, slidePx)
                 toOrFromTracking() -> fadeThroughIn()
                 else -> DefaultNavTransitions.enterTransition(this)
             }
         },
         exitTransition = {
             when {
-                betweenSetupSteps() || onTowardsBuses() || toOrFromHelp() -> sharedAxisOut(SlideDirection.Start, slidePx)
+                betweenSetupSteps() || onTowardsBuses() || toOrFromSettings() -> sharedAxisOut(SlideDirection.Start, slidePx)
                 toOrFromTracking() -> fadeThroughOut()
                 else -> DefaultNavTransitions.exitTransition(this)
             }
@@ -422,8 +427,6 @@ fun AppNav(modifier: Modifier = Modifier, navViewModel: AppNavViewModel = hiltVi
                     onRouteSelected = openRuns,
                     // Not a tap: it fires when the reply lands, and a guard would drop it.
                     onSessionEnded = { navController.navigate(ROUTE_LOGIN, toSignIn) },
-                    // Not a tap either: it fires once the phone has forgotten the driver.
-                    onSignedOut = { navController.navigate(ROUTE_LOGIN, toSignIn) },
                 )
             }
         }
@@ -455,8 +458,6 @@ fun AppNav(modifier: Modifier = Modifier, navViewModel: AppNavViewModel = hiltVi
                     onChooseAnotherRoute = dropUnlessResumed { navController.popBackStack() },
                     // Not a tap: it fires when the reply lands, and a guard would drop it.
                     onSessionEnded = { navController.navigate(ROUTE_LOGIN, toSignIn) },
-                    // Not a tap either: it fires once the phone has forgotten the driver.
-                    onSignedOut = { navController.navigate(ROUTE_LOGIN, toSignIn) },
                 )
             }
         }
@@ -479,6 +480,15 @@ fun AppNav(modifier: Modifier = Modifier, navViewModel: AppNavViewModel = hiltVi
                     },
                 )
             }
+        }
+        composable(ROUTE_SETTINGS) {
+            // Draws its header under the status bar and keeps the rest clear of the bars itself.
+            SettingsScreen(
+                onBack = dropUnlessResumed { navController.popBackStack() },
+                onHelp = dropUnlessResumed { navController.navigate(ROUTE_HELP) },
+                // Not a tap: it fires once the phone has forgotten the driver.
+                onSignedOut = { navController.navigate(ROUTE_LOGIN, toSignIn) },
+            )
         }
         composable(ROUTE_HELP) {
             ClearOfSystemBars {
@@ -526,19 +536,17 @@ private fun AfterTheFirstTrip(navController: NavController) {
 /** The bus step, under either of its routes: they differ only in whether one bus skips it. */
 private fun NavGraphBuilder.vehicleStep(route: String, navController: NavController) {
     composable(route) { backStackEntry ->
-        // The same view model as the account menu's on this step, so it knows when a sign-out has begun.
-        val account: AccountViewModel = hiltViewModel()
         val openRoutes = remember(backStackEntry) {
             backStackEntry.ifResumed<String> { vehicleId -> navController.navigate("trip/${arg(vehicleId)}") }
         }
-        // The one vehicle, once its assignment has landed. The skip waits while Help is over this step rather than
+        // The one vehicle, once its assignment has landed. The skip waits while Settings is over this step rather than
         // being dropped: the screen names the vehicle once, and the back gesture brings the step back without asking
         // it again.
         var onlyVehicle by remember { mutableStateOf<String?>(null) }
         val onTop = navController.currentBackStackEntryAsState().value?.id == backStackEntry.id
         LaunchedEffect(onlyVehicle, onTop) {
             val vehicleId = onlyVehicle ?: return@LaunchedEffect
-            if (skipsOnlyVehicle(route, account.uiState.value, onTop)) {
+            if (skipsOnlyVehicle(route, onTop)) {
                 navController.navigate("trip/${arg(vehicleId)}", skipBusStep)
             }
         }
@@ -551,8 +559,6 @@ private fun NavGraphBuilder.vehicleStep(route: String, navController: NavControl
                 // Not a tap: it fires when the reply lands, and a guard would drop it.
                 onSessionEnded = { navController.navigate(ROUTE_LOGIN, toSignIn) },
                 onSignIn = dropUnlessResumed { navController.navigate(ROUTE_LOGIN, toSignIn) },
-                // Not a tap either: it fires once the phone has forgotten the driver.
-                onSignedOut = { navController.navigate(ROUTE_LOGIN, toSignIn) },
             )
         }
     }

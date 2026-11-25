@@ -181,7 +181,6 @@ class RunStartRecreationTest {
                             onChangeBus = {},
                             onChooseAnotherRoute = {},
                             onSessionEnded = {},
-                            onSignedOut = {},
                             viewModel = viewModel(factory = runsFactory),
                         )
                     }

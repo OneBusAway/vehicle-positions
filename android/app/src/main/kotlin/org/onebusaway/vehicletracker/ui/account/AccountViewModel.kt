@@ -35,7 +35,7 @@ data class AccountUiState(
     val signedOut: Boolean = false,
 )
 
-/** Who is signed in, to which server, and Sign out, for the account menu on each picker step. */
+/** Who is signed in, to which server, and Sign out, for Settings. */
 @HiltViewModel
 class AccountViewModel @Inject constructor(
     sessionStore: SessionStore,

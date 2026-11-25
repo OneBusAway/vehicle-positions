@@ -142,7 +142,6 @@
 
     <!-- The account menu -->
     <string name="account_menu">Akaunti</string>
-    <string name="account_version">Toleo %1$s</string>
     <string name="account_sign_out">Ondoka</string>
     <string name="account_sign_out_title">Ondoka kwenye akaunti?</string>
     <string name="account_sign_out_message">Dereva anayefuata anaweza kuingia kwenye simu hii.</string>

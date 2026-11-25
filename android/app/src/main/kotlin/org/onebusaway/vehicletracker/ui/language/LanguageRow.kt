@@ -39,24 +39,35 @@ import androidx.compose.ui.text.intl.LocaleList
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import org.onebusaway.vehicletracker.R
+import org.onebusaway.vehicletracker.ui.components.GroupOuterCorner
 import org.onebusaway.vehicletracker.ui.components.QuietButton
 
-private val RowShape = RoundedCornerShape(20.dp)
+private val RowShape = RoundedCornerShape(GroupOuterCorner)
 
 /**
- * The Language row, on the first welcome screen and at the top of Help: "Language: English", in the language the app
- * shows. A tap opens the list of the app's languages on Android 13 and up, and the phone's language settings below.
- * [enabled] false takes no taps, for a welcome screen not shown.
+ * The Language row on the first welcome screen: "Language: English", in the language the app shows. [enabled] false takes
+ * no taps, for a welcome screen not shown.
  */
 @Composable
 internal fun LanguageRow(modifier: Modifier = Modifier, enabled: Boolean = true) {
+    LanguageChooser { shown, opensPhoneSettings, onClick ->
+        LanguageRowContent(shown, opensPhoneSettings, enabled, modifier, onClick)
+    }
+}
+
+/**
+ * A row that says which language the app shows, however [row] draws it, and what a tap on it does: it opens the list of
+ * the app's languages on Android 13 and up, and the phone's language settings below.
+ */
+@Composable
+internal fun LanguageChooser(row: @Composable (shown: AppLanguage, opensPhoneSettings: Boolean, onClick: () -> Unit) -> Unit) {
     val context = LocalContext.current
     val available = availableLanguages()
     val shown = shownLanguage(preferredLocales(), available)
     val controller = remember(context) { LanguageRowController(Build.VERSION.SDK_INT, AndroidLanguageSettings(context)) }
     var listOpen by rememberSaveable { mutableStateOf(false) }
 
-    LanguageRowContent(appLanguage(shown), controller.opensPhoneSettings, enabled, modifier) {
+    row(appLanguage(shown), controller.opensPhoneSettings) {
         if (controller.tap()) listOpen = true
     }
     if (listOpen) {
