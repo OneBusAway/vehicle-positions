@@ -63,6 +63,7 @@ import org.onebusaway.vehicletracker.ui.routes.RouteItem
 import org.onebusaway.vehicletracker.ui.routes.RoutesScreen
 import org.onebusaway.vehicletracker.ui.routes.routeColorHex
 import org.onebusaway.vehicletracker.ui.runs.RunsScreen
+import org.onebusaway.vehicletracker.ui.settings.PermissionCheckScreen
 import org.onebusaway.vehicletracker.ui.settings.SettingsScreen
 import org.onebusaway.vehicletracker.ui.theme.SharedAxisSlide
 import org.onebusaway.vehicletracker.ui.theme.fadeThroughIn
@@ -95,9 +96,10 @@ private const val ROUTE_ROUTES = "trip/{vehicleId}"
 private const val ROUTE_RUNS = "trip/{vehicleId}/routes/{routeId}?name={routeName}&color={routeColor}&text={routeTextColor}"
 private const val ROUTE_TRACKING = "tracking"
 private const val ROUTE_RESUME = "resume"
-// Settings, from the account button on the steps of choosing a trip, Help from Settings, and the welcome opened again
-// from Help.
+// Settings, from the account button on the steps of choosing a trip, Permission check and Help from Settings, and the
+// welcome opened again from Help.
 internal const val ROUTE_SETTINGS = "settings"
+internal const val ROUTE_PERMISSION_CHECK = "permission_check"
 internal const val ROUTE_HELP = "help"
 internal const val ROUTE_WELCOME_AGAIN = "welcome_again"
 // Not private: RunsViewModel reads them out of its SavedStateHandle, and the names have to
@@ -149,11 +151,11 @@ private fun AnimatedContentTransitionScope<NavBackStackEntry>.onTowardsBuses(): 
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.toOrFromTracking(): Boolean =
     initialState.destination.route == ROUTE_TRACKING || targetState.destination.route == ROUTE_TRACKING
 
-private val SETTINGS_ROUTES = setOf(ROUTE_SETTINGS, ROUTE_HELP, ROUTE_WELCOME_AGAIN)
+private val SETTINGS_ROUTES = setOf(ROUTE_SETTINGS, ROUTE_PERMISSION_CHECK, ROUTE_HELP, ROUTE_WELCOME_AGAIN)
 
 /**
- * Whether one step here opened the other: Settings is a step on from the step it opened over, Help from Settings, and the
- * welcome from Help. Not signing out, which leaves them all for Sign in.
+ * Whether one step here opened the other: Settings is a step on from the step it opened over, Permission check and Help
+ * from Settings, and the welcome from Help. Not signing out, which leaves them all for Sign in.
  */
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.toOrFromSettings(): Boolean {
     val from = initialState.destination.route
@@ -485,10 +487,16 @@ fun AppNav(modifier: Modifier = Modifier, navViewModel: AppNavViewModel = hiltVi
             // Draws its header under the status bar and keeps the rest clear of the bars itself.
             SettingsScreen(
                 onBack = dropUnlessResumed { navController.popBackStack() },
+                onPermissionCheck = dropUnlessResumed { navController.navigate(ROUTE_PERMISSION_CHECK) },
                 onHelp = dropUnlessResumed { navController.navigate(ROUTE_HELP) },
                 // Not a tap: it fires once the phone has forgotten the driver.
                 onSignedOut = { navController.navigate(ROUTE_LOGIN, toSignIn) },
             )
+        }
+        composable(ROUTE_PERMISSION_CHECK) {
+            ClearOfSystemBars {
+                PermissionCheckScreen(onBack = dropUnlessResumed { navController.popBackStack() })
+            }
         }
         composable(ROUTE_HELP) {
             ClearOfSystemBars {

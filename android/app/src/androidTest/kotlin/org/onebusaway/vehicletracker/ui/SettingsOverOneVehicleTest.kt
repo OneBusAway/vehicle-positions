@@ -1,11 +1,13 @@
 package org.onebusaway.vehicletracker.ui
 
 import androidx.activity.BackEventCompat
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.datastore.preferences.core.edit
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -120,6 +122,20 @@ class SettingsOverOneVehicleTest {
 
             assertTrue("Settings is still open", shows(R.string.settings_title, heading = true))
             assertFalse(onTheRouteStep)
+        }
+    }
+
+    @Test
+    fun permissionCheckOpensFromSettings_andBackComesBackToIt() {
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            openSettingsBeforeTheAssignmentsLand()
+
+            compose.onNode(hasText(string(R.string.permission_check_title)) and hasClickAction()).performScrollTo().performClick()
+            compose.waitUntil(TIMEOUT_MS) { shows(R.string.permission_check_intro) }
+
+            scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+            compose.waitUntil(TIMEOUT_MS) { shows(R.string.settings_title, heading = true) }
+            assertFalse(shows(R.string.permission_check_intro))
         }
     }
 

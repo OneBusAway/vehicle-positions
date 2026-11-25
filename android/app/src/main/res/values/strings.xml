@@ -168,6 +168,9 @@
     <!-- Under Not ready to report: the app has no location, or the phone's own location switch is off. -->
     <string name="settings_location_refused">Location is not allowed for this app.</string>
     <string name="settings_location_off">Location is off for the whole phone.</string>
+    <!-- Buttons under Not ready to report: Android asks about the app's location, or turns location on for the phone. -->
+    <string name="settings_allow_location">Allow location</string>
+    <string name="settings_turn_on_location">Turn on location</string>
     <!-- Under Ready to report, when a trip can start but something it would be better with is missing: how many, then their names as on Before you start, e.g. "2 things to fix: Notifications, Battery". -->
     <plurals name="settings_fix">
         <item quantity="one">%1$d thing to fix: %2$s</item>
@@ -178,6 +181,12 @@
         <item quantity="one">%1$d thing to fix</item>
         <item quantity="other">%1$d things to fix</item>
     </plurals>
+    <!-- Over the rows about this phone, such as Permission check. -->
+    <string name="settings_group_phone">This phone</string>
+    <!-- Under Permission check in Settings, in a few words: what the phone allows the app. -->
+    <string name="settings_permissions_all">All allowed</string>
+    <string name="settings_permissions_refused">Location is not allowed</string>
+    <string name="settings_permissions_off">Location is off</string>
     <!-- Over the rows about the app itself, such as its language. -->
     <string name="settings_group_app">App</string>
     <!-- The row that names the app's theme, and the title over the list of themes a tap on it opens. -->
@@ -188,6 +197,16 @@
     <string name="theme_system_detail">Same as the phone</string>
     <string name="theme_light">Light</string>
     <string name="theme_dark">Dark</string>
+    <!-- Permission check, opened from Settings: a page with each thing the app needs, as on Before you start, and what fixes one that is missing. The same words name its row in Settings, and what a tap on the top of Settings does for TalkBack. -->
+    <string name="permission_check_title">Permission check</string>
+    <string name="permission_check_intro">What the app needs to report your vehicle.</string>
+    <!-- The last row, after all the things the app needs: whether riders can see the vehicle. -->
+    <string name="permission_check_riders">Riders</string>
+    <string name="permission_check_riders_ready">They see your vehicle during a trip.</string>
+    <string name="permission_check_riders_not_ready">They can\'t see you yet.</string>
+    <!-- Buttons on a row that is missing: Android asks about it, or turns location on for the phone. -->
+    <string name="permission_check_allow">Allow</string>
+    <string name="permission_check_turn_on">Turn on</string>
     <!-- Over the last rows of Settings: Help, Share diagnostics and the app's version, e.g. "0.1.0 (1)", under its label. -->
     <string name="help_section_about">About</string>
     <string name="help_version">Version</string>
