@@ -187,6 +187,9 @@
     <string name="settings_permissions_all">All allowed</string>
     <string name="settings_permissions_refused">Location is not allowed</string>
     <string name="settings_permissions_off">Location is off</string>
+    <!-- Under During a trip in Settings: when the display stays on. -->
+    <string name="settings_screen_charging">Screen on while charging</string>
+    <string name="settings_screen_always">Screen always on</string>
     <!-- Over the rows about the app itself, such as its language. -->
     <string name="settings_group_app">App</string>
     <!-- The row that names the app's theme, and the title over the list of themes a tap on it opens. -->
@@ -207,6 +210,21 @@
     <!-- Buttons on a row that is missing: Android asks about it, or turns location on for the phone. -->
     <string name="permission_check_allow">Allow</string>
     <string name="permission_check_turn_on">Turn on</string>
+    <!-- During a trip, opened from Settings: a page of choices for the Tracking screen. The same words name its row in Settings. -->
+    <string name="trip_settings_title">During a trip</string>
+    <!-- Over two choices: when the phone's display stays on, each over what it means. -->
+    <string name="trip_screen">Screen</string>
+    <string name="trip_screen_charging">On while charging</string>
+    <string name="trip_screen_charging_detail">On battery it goes dark as usual</string>
+    <string name="trip_screen_always">Always on</string>
+    <string name="trip_screen_always_detail">Uses more battery</string>
+    <!-- Over two choices with a picture each: what is at the top of the map. -->
+    <string name="trip_map">Map</string>
+    <string name="trip_map_heading">The way you drive</string>
+    <string name="trip_map_north">North up</string>
+    <!-- A switch, over the problems it is for. -->
+    <string name="trip_vibrate">Vibrate when reporting has a problem</string>
+    <string name="trip_vibrate_detail">No connection, no GPS, or signed out</string>
     <!-- Over the last rows of Settings: Help, Share diagnostics and the app's version, e.g. "0.1.0 (1)", under its label. -->
     <string name="help_section_about">About</string>
     <string name="help_version">Version</string>

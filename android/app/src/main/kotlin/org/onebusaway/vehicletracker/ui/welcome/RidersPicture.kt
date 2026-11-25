@@ -37,18 +37,14 @@ import org.onebusaway.vehicletracker.ui.map.MARKER_INK
 import org.onebusaway.vehicletracker.ui.map.NEXT_STOP_FILL
 import org.onebusaway.vehicletracker.ui.map.STOP_FILL
 import org.onebusaway.vehicletracker.ui.map.STOP_RING
+import org.onebusaway.vehicletracker.ui.map.StreetColors
 import org.onebusaway.vehicletracker.ui.map.casingColor
+import org.onebusaway.vehicletracker.ui.map.streetColors
 import org.onebusaway.vehicletracker.ui.theme.AppTheme
 import kotlin.math.max
 import kotlin.math.min
 
 /** The streets behind the picture: the only colours in the welcome that are not the theme's or the Tracking map's. */
-private class StreetColors(val land: Color, val road: Color, val park: Color)
-
-// The day roads are grey rather than the Tracking design's white, which can't be seen on this land.
-private val DayStreets = StreetColors(land = Color(0xFFEDEFF1), road = Color(0xFFCED2D6), park = Color(0xFFD5E8D4))
-private val NightStreets = StreetColors(land = Color(0xFF1F2023), road = Color(0xFF36383C), park = Color(0xFF1C2A21))
-
 /** The picture's colours, read from the theme once in composition so that drawing a frame reads none. */
 private class RidersColors(
     val streets: StreetColors,
@@ -114,7 +110,7 @@ internal fun RidersPicture(clock: PictureClock, compact: Boolean, modifier: Modi
     val dark = isSystemInDarkTheme()
     val colors = remember(scheme, status, dark) {
         RidersColors(
-            streets = if (dark) NightStreets else DayStreets,
+            streets = streetColors(dark),
             route = scheme.primary,
             casing = Color(casingColor(scheme.primary.toArgb(), dark)),
             ringWaiting = status.neutral.text,

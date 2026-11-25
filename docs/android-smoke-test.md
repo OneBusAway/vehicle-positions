@@ -243,6 +243,15 @@ foreground-service notification is in the status bar.
 There is no route-id or trip-id text box anywhere in this flow any more. The
 ids now come from the catalog, which is the point of Check 2.
 
+Check 1b left **Always on** and **North up** chosen. Unplug the phone (on an
+emulator, `adb shell dumpsys battery unplug`) and feed it a fix on the route
+(`adb emu geo fix -122.33 47.6045`): the screen stays on past its timeout, and
+the map has north at the top with the vehicle in the middle of what the status
+card and the trip bar leave uncovered. Then plug it in again (`adb shell dumpsys
+battery reset`), tap **End trip** and confirm. Under **During a trip** put **On
+while charging** and **The way you drive** back, and start the run again for the
+checks that follow.
+
 ### Check 1b: Sign out from any step
 
 Run this at Check 1's **Choose a run**, before you tap the run. It ends signed
@@ -268,12 +277,14 @@ OTHER_REFRESH=$(curl -s -X POST "$BASE/api/v1/auth/login" \
    `driver@example.com` and the server (`10.0.2.2:8081` on an emulator) beside
    **Sign out**. At the end is **Version** `0.1.0 (1)`. Tap the top of the
    page, or **Permission check**: each thing the app needs is there with
-   **Allowed** or a button that fixes it, and no trip starts. Go back. Tap
-   **Theme**, then **Dark**: the app is dark at once, with **Settings** still
-   open. Put it back to **System**. Tap **Sign out**: "Sign out?" with "The next
-   driver can sign in on this phone." Tap **Sign out** again: **Sign in** opens
-   with the server as one line and the email empty. Back closes the app. The
-   server log has the logout:
+   **Allowed** or a button that fixes it, and no trip starts. Go back. Under
+   **During a trip** choose **Always on** and **North up**, and leave them for
+   Check 1, which puts them back. Go back. Tap **Theme**, then **Dark**: the
+   app is dark at once, with **Settings** still open. Put it back to
+   **System**. Tap **Sign out**: "Sign out?" with "The next driver can sign in
+   on this phone." Tap **Sign out** again: **Sign in** opens with the server as
+   one line and the email empty. Back closes the app. The server log has the
+   logout:
 
    ```bash
    grep '"path":"/api/v1/auth/logout"' /tmp/vt-server.log

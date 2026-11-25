@@ -27,6 +27,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.maplibre.android.maps.MapView
+import org.onebusaway.vehicletracker.data.MapUp
 import org.onebusaway.vehicletracker.data.map.MapFileState
 import org.onebusaway.vehicletracker.engine.AdherenceThresholds
 import org.onebusaway.vehicletracker.engine.GeoPoint
@@ -58,7 +59,7 @@ class RouteMapThemeTest {
             val configuration = Configuration(LocalConfiguration.current).apply { uiMode = uiMode and Configuration.UI_MODE_NIGHT_MASK.inv() or night }
             CompositionLocalProvider(LocalConfiguration provides configuration) {
                 AppTheme {
-                    RouteMap(trip, null, MapFileState.None, ring, PaddingValues(0.dp), PaddingValues(0.dp), Modifier.fillMaxSize())
+                    RouteMap(trip, null, MapFileState.None, ring, MapUp.HEADING, PaddingValues(0.dp), PaddingValues(0.dp), Modifier.fillMaxSize())
                 }
             }
         }

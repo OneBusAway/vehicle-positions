@@ -94,6 +94,7 @@ import org.maplibre.geojson.FeatureCollection
 import org.maplibre.geojson.Point
 import org.onebusaway.vehicletracker.R
 import org.onebusaway.vehicletracker.data.map.MapFailure
+import org.onebusaway.vehicletracker.data.MapUp
 import org.onebusaway.vehicletracker.data.map.MapFileState
 import org.onebusaway.vehicletracker.data.map.downloadPercent
 import org.onebusaway.vehicletracker.engine.Adherence
@@ -160,9 +161,9 @@ fun Context.glEsVersion(): Int = getSystemService(ActivityManager::class.java).d
  * The trip on a map: the shape in the route colour over a casing, the stops with the next one
  * enlarged and named, and the vehicle pointed along its course and ringed in [vehicleRing], ARGB,
  * the status colour of how it is keeping to the schedule. Off the route, a dotted line joins it to
- * where it was matched. The camera follows heading-up with the vehicle a third of the way up the
- * part of the map that [contentPadding], the screen's own cards and bars over it, leaves
- * uncovered. Under it is the agency's street map once the file is on the phone, and a plain
+ * where it was matched. The camera follows with [up] at the top: heading-up the vehicle is a third
+ * of the way up the part of the map that [contentPadding], the screen's own cards and bars over
+ * it, leaves uncovered, and north-up in the middle of it. Under it is the agency's street map once the file is on the phone, and a plain
  * background until then, with a note while the first copy downloads. The note and Re-center sit
  * at the bottom left, inside [controlsPadding].
  */
@@ -172,6 +173,7 @@ fun RouteMap(
     adherence: Adherence?,
     mapFile: MapFileState,
     vehicleRing: Int,
+    up: MapUp,
     contentPadding: PaddingValues,
     controlsPadding: PaddingValues,
     modifier: Modifier = Modifier,
@@ -179,7 +181,7 @@ fun RouteMap(
     // A map draws its colours once, so a change of theme is another map.
     val dark = isSystemInDarkTheme()
     key(dark) {
-        ThemedRouteMap(dark, geometry, adherence, mapFile, vehicleRing, contentPadding, controlsPadding, modifier)
+        ThemedRouteMap(dark, geometry, adherence, mapFile, vehicleRing, up, contentPadding, controlsPadding, modifier)
     }
 }
 
@@ -191,6 +193,7 @@ private fun ThemedRouteMap(
     adherence: Adherence?,
     mapFile: MapFileState,
     vehicleRing: Int,
+    up: MapUp,
     contentPadding: PaddingValues,
     controlsPadding: PaddingValues,
     modifier: Modifier,
@@ -208,6 +211,7 @@ private fun ThemedRouteMap(
     }
     LaunchedEffect(geometry, adherence) { controller.show(geometry, adherence) }
     LaunchedEffect(vehicleRing) { controller.ringVehicle(vehicleRing) }
+    LaunchedEffect(up) { controller.orient(up) }
     val density = LocalDensity.current
     val coveredTop = with(density) { contentPadding.calculateTopPadding().roundToPx() }
     val coveredBottom = with(density) { contentPadding.calculateBottomPadding().roundToPx() }
@@ -342,6 +346,8 @@ private class RouteMapController(
 
     private val density = context.resources.displayMetrics.density
     private var map: MapLibreMap? = null
+
+    private var up = MapUp.HEADING
 
     /** Pixels at the map's top and bottom edges that the screen draws over, so the trip is kept out of them. */
     private var coveredTop = 0
@@ -479,19 +485,26 @@ private class RouteMapController(
         startFollowing(map, zoom = null)
     }
 
+    /** Turns the map to have [up] at the top, when it was on screen already as the driver's choice was read. */
+    fun orient(up: MapUp) {
+        if (up == this.up) return
+        this.up = up
+        if (following) follow()
+    }
+
     /**
-     * Moves the camera to the vehicle and keeps it there, heading-up. The padding is what puts
+     * Moves the camera to the vehicle and keeps it there, [up] at the top. The padding is what puts
      * the vehicle a third of the way up the uncovered map (spec §6.3), with the road ahead above
-     * it. It is set once the camera has arrived, because MapLibre ignores it while the camera is
-     * on its way.
+     * it, or north-up in the middle. It is set once the camera has arrived, because MapLibre ignores
+     * it while the camera is on its way.
      */
     private fun startFollowing(map: MapLibreMap, zoom: Double?) {
         val component = map.locationComponent
         component.setCameraMode(
-            CameraMode.TRACKING_GPS,
+            if (up == MapUp.NORTH) CameraMode.TRACKING_GPS_NORTH else CameraMode.TRACKING_GPS,
             FOLLOW_ANIMATION_MS,
             zoom,
-            null,
+            if (up == MapUp.NORTH) 0.0 else null,
             0.0,
             object : OnLocationCameraTransitionListener {
                 override fun onLocationCameraTransitionFinished(cameraMode: Int) = applyFollowPadding()
@@ -505,7 +518,7 @@ private class RouteMapController(
     private fun applyFollowPadding(animationMs: Long = FOLLOW_ANIMATION_MS) {
         val map = map ?: return
         if (destroyed) return
-        map.locationComponent.paddingWhileTracking(followPadding(mapView.height, coveredTop, coveredBottom), animationMs)
+        map.locationComponent.paddingWhileTracking(followPadding(mapView.height, coveredTop, coveredBottom, up), animationMs)
     }
 
     private fun uncoveredHeight(): Int = (mapView.height - coveredTop - coveredBottom).coerceAtLeast(0)
@@ -739,7 +752,7 @@ private class RouteMapController(
 
         if (previous == null) {
             // The first fix: leave the whole-route view for the vehicle.
-            val aheadDp = uncoveredHeight() / density * 2 / 3
+            val aheadDp = uncoveredHeight() / density * shareAhead(up)
             startFollowing(map, followZoom(next.vehicle.lat, aheadDp.toDouble()))
         }
     }

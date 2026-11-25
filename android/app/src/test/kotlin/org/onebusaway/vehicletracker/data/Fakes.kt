@@ -1,13 +1,23 @@
 package org.onebusaway.vehicletracker.data
 
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flow
 import org.onebusaway.vehicletracker.data.map.MapFileSource
 import org.onebusaway.vehicletracker.data.map.MapFileState
 import org.onebusaway.vehicletracker.engine.TripGeometry
 import org.onebusaway.vehicletracker.service.ServiceController
 import java.security.GeneralSecurityException
 import java.util.Base64
+
+/** Stands in for storage that cannot be read or written at all, so the failure paths are reachable. */
+class FailingDataStore(private val failure: Throwable) : DataStore<Preferences> {
+    override val data: Flow<Preferences> = flow { throw failure }
+    override suspend fun updateData(transform: suspend (Preferences) -> Preferences): Preferences = throw failure
+}
 
 /**
  * Stands in for [KeystoreCryptor] so session and migration logic runs on the JVM, where CI

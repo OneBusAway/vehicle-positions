@@ -16,22 +16,25 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LifecycleStartEffect
+import org.onebusaway.vehicletracker.data.ScreenOn
 
 /**
- * Whether the display stays on: while Tracking is on screen and the phone is plugged in, as on iOS. [plugged] is
- * [BatteryManager.EXTRA_PLUGGED], 0 on battery. Plugged in, not charging: a phone on its charger that has stopped
- * charging, full or held at a limit, stays on too, as with Android's own Stay awake while charging.
+ * Whether the display stays on: while Tracking is on screen and the phone is plugged in, as on iOS, or on battery too when
+ * the driver chose always. [plugged] is [BatteryManager.EXTRA_PLUGGED], 0 on battery. Plugged in, not charging: a phone on
+ * its charger that has stopped charging, full or held at a limit, stays on too, as with Android's own Stay awake while
+ * charging.
  */
-internal fun keepsScreenOn(trackingShowing: Boolean, plugged: Int): Boolean = trackingShowing && plugged != 0
+internal fun keepsScreenOn(trackingShowing: Boolean, plugged: Int, choice: ScreenOn): Boolean =
+    trackingShowing && (choice == ScreenOn.ALWAYS || plugged != 0)
 
 /**
- * Keeps the display on while this is on screen and the phone is plugged in: a phone in a dash mount goes dark after
- * the screen timeout, and the driver should not have to reach over to wake it. [android.view.View.keepScreenOn] holds
+ * Keeps the display on while this is on screen, by [choice]: a phone in a dash mount goes dark after the screen timeout,
+ * and the driver should not have to reach over to wake it. [android.view.View.keepScreenOn] holds
  * only while the window is visible, and is cleared when Tracking goes away. The battery broadcast is listened to only
  * while the screen is started, which also lets go when the app goes to the background.
  */
 @Composable
-internal fun KeepScreenOnWhileCharging() {
+internal fun KeepScreenOn(choice: ScreenOn) {
     val context = LocalContext.current
     val view = LocalView.current
     var showing by remember { mutableStateOf(false) }
@@ -55,7 +58,7 @@ internal fun KeepScreenOnWhileCharging() {
             context.unregisterReceiver(receiver)
         }
     }
-    val keepOn = keepsScreenOn(showing, plugged)
+    val keepOn = keepsScreenOn(showing, plugged, choice)
     DisposableEffect(view, keepOn) {
         view.keepScreenOn = keepOn
         onDispose { view.keepScreenOn = false }
