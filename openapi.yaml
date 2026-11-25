@@ -56,7 +56,8 @@ tags:
   - name: gtfs
     description: Read-only access to the loaded GTFS schedule.
   - name: map
-    description: Where the driver app gets its offline street map.
+    description: |
+      Where the driver app gets its offline street map, and the agency's links.
   - name: rider
     description: |
       Crowd-sourced positioning from rider devices. These five routes are
@@ -378,6 +379,29 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MapConfig'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/agency:
+    get:
+      tags: [map]
+      summary: What the driver app says about the agency
+      description: |
+        Requires a driver or admin bearer token. `privacy_policy_url` is the
+        agency's privacy policy, set with `PRIVACY_POLICY_URL`, or null when it
+        has not set one. A server older than this route answers 404, which a
+        client should read the same as null.
+      responses:
+        '200':
+          description: The agency's links.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Agency'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -3383,6 +3407,17 @@ components:
           description: |
             An http or https URL of a PMTiles map file covering the agency's
             service area, or null when the agency has not configured one.
+
+    Agency:
+      type: object
+      required: [privacy_policy_url]
+      properties:
+        privacy_policy_url:
+          type: [string, 'null']
+          format: uri
+          description: |
+            An https URL of the agency's privacy policy, for the app to open in
+            the phone's browser, or null when the agency has not set one.
 
     RiderRegisterRequest:
       type: object

@@ -67,9 +67,10 @@ Rules that apply to the whole table:
 - An unset or empty variable takes the default. A value that cannot be parsed
   is **ignored**, logged as a warning, and the default is used instead — so
   check the logs after a change rather than assuming it took effect.
-  `FEED_AUTH_ENABLED` (see [Feed access](#feed-access)) and `MAP_PMTILES_URL`
-  (see [Driver app map](#driver-app-map)) are stricter on purpose: a value
-  they cannot use stops the server at startup. So does a `DATABASE_URL` or
+  `FEED_AUTH_ENABLED` (see [Feed access](#feed-access)), `MAP_PMTILES_URL`
+  (see [Driver app map](#driver-app-map)) and `PRIVACY_POLICY_URL` (see
+  [Driver app privacy policy](#driver-app-privacy-policy)) are stricter on
+  purpose: a value they cannot use stops the server at startup. So does a `DATABASE_URL` or
   `PORT` the server cannot use.
 - Booleans accept anything Go's `strconv.ParseBool` accepts: `true`, `false`,
   `1`, `0`, `t`, `f`, `TRUE`, `FALSE`.
@@ -98,6 +99,12 @@ Rules that apply to the whole table:
 | Variable | Default | Purpose |
 |---|---|---|
 | `MAP_PMTILES_URL` | unset | The street map the driver app shows under the route: an `https` URL of a PMTiles file covering your service area, hosted wherever you like. Section [12.6](#126-offline-street-map) says how to make and host one. The server never fetches the file; it hands the URL to drivers at `GET /api/v1/map`. Unset, the app draws the route on a plain background. A value that is not an `http(s)` URL with a host, or that contains a username or password, stops the server at startup. Plain `http` is accepted with a warning, but Android release builds refuse to download over it. |
+
+### Driver app privacy policy
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `PRIVACY_POLICY_URL` | unset | The agency's privacy policy, an `https` URL the driver apps open in the phone's browser. The server hands it to drivers at `GET /api/v1/agency`. Unset, the apps show no link. A value that is not an `https` URL with a host, or that contains a username or password, stops the server at startup. |
 
 ### Admin UI and proxying
 

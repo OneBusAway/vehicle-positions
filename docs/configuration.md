@@ -91,6 +91,14 @@ hosting one. Unset, the app draws the route on a plain background.
 |---|---|---|---|
 | `MAP_PMTILES_URL` | unset | Optional | `http` or `https` URL of the PMTiles map file, handed as is to drivers at `GET /api/v1/map`. When it is unset, empty or only whitespace, `pmtiles_url` is `null`. A value that is not an `http` or `https` URL with a host, or that carries a username or password (the URL goes to every driver's phone), **refuses to start**; the check runs before the database is opened. Plain `http` starts with a `WARN`: Android blocks cleartext downloads in release builds, so use `https` in production. |
 
+## Driver app privacy policy
+
+Optional. A link in the driver apps' Settings to the agency's own privacy policy.
+
+| Variable | Default | Status | Purpose |
+|---|---|---|---|
+| `PRIVACY_POLICY_URL` | unset | Optional | `https` URL of the agency's privacy policy, handed as is to drivers at `GET /api/v1/agency` for the app to open in the phone's browser. When it is unset, empty or only whitespace, `privacy_policy_url` is `null` and the app shows no link. A value that is not an `https` URL with a host, or that carries a username or password (the URL goes to every driver's phone), **refuses to start**; the check runs before the database is opened. |
+
 ## Admin UI and first-admin bootstrap
 
 | Variable | Default | Status | Purpose |
