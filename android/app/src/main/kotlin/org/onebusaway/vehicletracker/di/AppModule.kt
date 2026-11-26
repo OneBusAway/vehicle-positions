@@ -7,6 +7,11 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import java.io.File
+import java.time.Duration
+import java.time.ZoneId
+import javax.inject.Qualifier
+import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -14,6 +19,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.runBlocking
+import org.onebusaway.vehicletracker.R
 import org.onebusaway.vehicletracker.data.AppLog
 import org.onebusaway.vehicletracker.data.DataStoreDriverFlagsStore
 import org.onebusaway.vehicletracker.data.DataStoreTripSettingsStore
@@ -22,28 +28,25 @@ import org.onebusaway.vehicletracker.data.DataStoreVehiclePrefsStore
 import org.onebusaway.vehicletracker.data.DriverFlagsStore
 import org.onebusaway.vehicletracker.data.EncryptedSessionStore
 import org.onebusaway.vehicletracker.data.FileOfflineFixQueue
-import org.onebusaway.vehicletracker.data.OfflineFixQueue
 import org.onebusaway.vehicletracker.data.FileTripGeometryStore
-import org.onebusaway.vehicletracker.data.isDebuggable
-import org.onebusaway.vehicletracker.data.presetServerOf
 import org.onebusaway.vehicletracker.data.KeystoreCryptor
 import org.onebusaway.vehicletracker.data.ManagedServerSource
+import org.onebusaway.vehicletracker.data.OfflineFixQueue
+import org.onebusaway.vehicletracker.data.PrivacyPolicySource
 import org.onebusaway.vehicletracker.data.RestrictionsManagedServerSource
 import org.onebusaway.vehicletracker.data.SessionStore
+import org.onebusaway.vehicletracker.data.TrackerPrivacyPolicy
 import org.onebusaway.vehicletracker.data.TripGeometryStore
 import org.onebusaway.vehicletracker.data.TripSettingsStore
 import org.onebusaway.vehicletracker.data.TripStateStore
 import org.onebusaway.vehicletracker.data.VehiclePrefsStore
-import org.onebusaway.vehicletracker.data.driverFlagsDataStore
-import org.onebusaway.vehicletracker.data.sessionDataStore
-import org.onebusaway.vehicletracker.data.tripSettingsDataStore
-import org.onebusaway.vehicletracker.data.tripStateDataStore
-import org.onebusaway.vehicletracker.data.vehiclePrefsDataStore
 import org.onebusaway.vehicletracker.data.api.ApiFactory
 import org.onebusaway.vehicletracker.data.api.BoundApi
 import org.onebusaway.vehicletracker.data.api.TokenRefresher
 import org.onebusaway.vehicletracker.data.api.TrackerApi
 import org.onebusaway.vehicletracker.data.api.TrackerApiProvider
+import org.onebusaway.vehicletracker.data.driverFlagsDataStore
+import org.onebusaway.vehicletracker.data.isDebuggable
 import org.onebusaway.vehicletracker.data.map.MapFileDownloader
 import org.onebusaway.vehicletracker.data.map.MapFileFetcher
 import org.onebusaway.vehicletracker.data.map.MapFileSource
@@ -52,21 +55,20 @@ import org.onebusaway.vehicletracker.data.map.MapRepository
 import org.onebusaway.vehicletracker.data.map.MapServer
 import org.onebusaway.vehicletracker.data.map.OfflineMapSource
 import org.onebusaway.vehicletracker.data.map.TrackerMapServer
+import org.onebusaway.vehicletracker.data.presetServerOf
+import org.onebusaway.vehicletracker.data.sessionDataStore
+import org.onebusaway.vehicletracker.data.tripSettingsDataStore
+import org.onebusaway.vehicletracker.data.tripStateDataStore
+import org.onebusaway.vehicletracker.data.vehiclePrefsDataStore
 import org.onebusaway.vehicletracker.service.RestartTracking
 import org.onebusaway.vehicletracker.service.ResumeNotifier
 import org.onebusaway.vehicletracker.service.ServiceController
-import org.onebusaway.vehicletracker.R
 import org.onebusaway.vehicletracker.service.ServiceControllerImpl
 import org.onebusaway.vehicletracker.service.TrackingNotification
 import org.onebusaway.vehicletracker.service.appInFront
 import org.onebusaway.vehicletracker.service.canReportInBackground
 import org.onebusaway.vehicletracker.ui.theme.ThemeController
 import org.onebusaway.vehicletracker.ui.theme.themeController
-import java.io.File
-import java.time.Duration
-import java.time.ZoneId
-import javax.inject.Qualifier
-import javax.inject.Singleton
 
 /** Qualifies the injected `() -> Long` clock lambda (epoch seconds) so the binding is unambiguous. */
 @Qualifier
@@ -294,6 +296,9 @@ object AppModule {
 
     @Provides
     fun provideMapServer(holder: ApiHolder): MapServer = TrackerMapServer(holder::boundApi)
+
+    @Provides
+    fun providePrivacyPolicySource(holder: ApiHolder): PrivacyPolicySource = TrackerPrivacyPolicy(holder::boundApi)
 
     @Provides
     fun provideMapFileSource(repository: MapRepository): MapFileSource = repository

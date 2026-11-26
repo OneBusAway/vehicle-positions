@@ -63,8 +63,11 @@ import org.onebusaway.vehicletracker.ui.routes.RouteItem
 import org.onebusaway.vehicletracker.ui.routes.RoutesScreen
 import org.onebusaway.vehicletracker.ui.routes.routeColorHex
 import org.onebusaway.vehicletracker.ui.runs.RunsScreen
+import org.onebusaway.vehicletracker.ui.settings.LicenseScreen
+import org.onebusaway.vehicletracker.ui.settings.LicensesScreen
 import org.onebusaway.vehicletracker.ui.settings.OfflineMapScreen
 import org.onebusaway.vehicletracker.ui.settings.PermissionCheckScreen
+import org.onebusaway.vehicletracker.ui.settings.PrivacyScreen
 import org.onebusaway.vehicletracker.ui.settings.SettingsScreen
 import org.onebusaway.vehicletracker.ui.settings.TripSettingsScreen
 import org.onebusaway.vehicletracker.ui.settings.TripSettingsViewModel
@@ -99,12 +102,15 @@ private const val ROUTE_ROUTES = "trip/{vehicleId}"
 private const val ROUTE_RUNS = "trip/{vehicleId}/routes/{routeId}?name={routeName}&color={routeColor}&text={routeTextColor}"
 private const val ROUTE_TRACKING = "tracking"
 private const val ROUTE_RESUME = "resume"
-// Settings, from the account button on the steps of choosing a trip, Permission check, During a trip, Offline map and
-// Help from Settings, and the welcome opened again from Help.
+// Settings, from the account button on the steps of choosing a trip, Permission check, During a trip, Offline map, Help,
+// Privacy and Licenses from Settings, a license from Licenses, and the welcome opened again from Help.
 internal const val ROUTE_SETTINGS = "settings"
 internal const val ROUTE_PERMISSION_CHECK = "permission_check"
 internal const val ROUTE_TRIP_SETTINGS = "trip_settings"
 internal const val ROUTE_OFFLINE_MAP = "offline_map"
+internal const val ROUTE_PRIVACY = "privacy"
+internal const val ROUTE_LICENSES = "licenses"
+internal const val ROUTE_LICENSE = "license/{index}"
 internal const val ROUTE_HELP = "help"
 internal const val ROUTE_WELCOME_AGAIN = "welcome_again"
 // Not private: RunsViewModel reads them out of its SavedStateHandle, and the names have to
@@ -156,11 +162,14 @@ private fun AnimatedContentTransitionScope<NavBackStackEntry>.onTowardsBuses(): 
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.toOrFromTracking(): Boolean =
     initialState.destination.route == ROUTE_TRACKING || targetState.destination.route == ROUTE_TRACKING
 
-private val SETTINGS_ROUTES = setOf(ROUTE_SETTINGS, ROUTE_PERMISSION_CHECK, ROUTE_TRIP_SETTINGS, ROUTE_OFFLINE_MAP, ROUTE_HELP, ROUTE_WELCOME_AGAIN)
+private val SETTINGS_ROUTES = setOf(
+    ROUTE_SETTINGS, ROUTE_PERMISSION_CHECK, ROUTE_TRIP_SETTINGS, ROUTE_OFFLINE_MAP, ROUTE_HELP, ROUTE_PRIVACY, ROUTE_LICENSES, ROUTE_LICENSE,
+    ROUTE_WELCOME_AGAIN,
+)
 
 /**
  * Whether one step here opened the other: Settings is a step on from the step it opened over, Permission check, During a
- * trip, Offline map and Help from Settings, and the welcome from Help. Not signing out, which leaves them all for Sign in.
+ * trip, Offline map, Help, Privacy and Licenses from Settings, a license from Licenses, and the welcome from Help. Not signing out, which leaves them all for Sign in.
  */
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.toOrFromSettings(): Boolean {
     val from = initialState.destination.route
@@ -496,6 +505,8 @@ fun AppNav(modifier: Modifier = Modifier, navViewModel: AppNavViewModel = hiltVi
                 onTripSettings = dropUnlessResumed { navController.navigate(ROUTE_TRIP_SETTINGS) },
                 onOfflineMap = dropUnlessResumed { navController.navigate(ROUTE_OFFLINE_MAP) },
                 onHelp = dropUnlessResumed { navController.navigate(ROUTE_HELP) },
+                onPrivacy = dropUnlessResumed { navController.navigate(ROUTE_PRIVACY) },
+                onLicenses = dropUnlessResumed { navController.navigate(ROUTE_LICENSES) },
                 // Not a tap: it fires once the phone has forgotten the driver.
                 onSignedOut = { navController.navigate(ROUTE_LOGIN, toSignIn) },
             )
@@ -517,6 +528,24 @@ fun AppNav(modifier: Modifier = Modifier, navViewModel: AppNavViewModel = hiltVi
                     // Only this page, and only while it is the one on top.
                     onGone = { if (navController.currentBackStackEntry == entry) navController.popBackStack() },
                 )
+            }
+        }
+        composable(ROUTE_PRIVACY) {
+            ClearOfSystemBars {
+                PrivacyScreen(onBack = dropUnlessResumed { navController.popBackStack() })
+            }
+        }
+        composable(ROUTE_LICENSES) { entry ->
+            ClearOfSystemBars {
+                LicensesScreen(
+                    onBack = dropUnlessResumed { navController.popBackStack() },
+                    onOpen = entry.ifResumed { index: Int -> navController.navigate(ROUTE_LICENSE.replace("{index}", index.toString())) },
+                )
+            }
+        }
+        composable(ROUTE_LICENSE, arguments = listOf(navArgument("index") { type = NavType.IntType })) { entry ->
+            ClearOfSystemBars {
+                LicenseScreen(entry.arguments?.getInt("index") ?: 0, onBack = dropUnlessResumed { navController.popBackStack() })
             }
         }
         composable(ROUTE_HELP) {

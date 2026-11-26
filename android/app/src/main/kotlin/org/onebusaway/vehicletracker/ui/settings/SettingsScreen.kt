@@ -82,7 +82,8 @@ private const val STACKS_FROM_TEXT = 1.3f
 
 /**
  * Settings, opened from the account button: whether this phone can report a trip, who is signed in and Sign out, what the
- * app is allowed and does during a trip, the agency's offline map, its language and theme, Help and the build. [onSignedOut] is the phone having forgotten the driver.
+ * app is allowed and does during a trip, the agency's offline map, its language and theme, Help, Privacy, Licenses and
+ * the build. [onSignedOut] is the phone having forgotten the driver.
  */
 @Composable
 fun SettingsScreen(
@@ -91,6 +92,8 @@ fun SettingsScreen(
     onTripSettings: () -> Unit,
     onOfflineMap: () -> Unit,
     onHelp: () -> Unit,
+    onPrivacy: () -> Unit,
+    onLicenses: () -> Unit,
     onSignedOut: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
     tripSettingsViewModel: TripSettingsViewModel = hiltViewModel(),
@@ -130,6 +133,8 @@ fun SettingsScreen(
         onSignedOut = onSignedOut,
         onChooseTheme = { if (viewModel.onChooseTheme(it)) activity?.recreate() },
         onHelp = onHelp,
+        onPrivacy = onPrivacy,
+        onLicenses = onLicenses,
         onShare = {
             if (sharing.compareAndSet(false, true)) {
                 scope.launch {
@@ -174,6 +179,8 @@ internal fun SettingsContent(
     onSignedOut: () -> Unit,
     onChooseTheme: (ThemeChoice) -> Unit,
     onHelp: () -> Unit,
+    onPrivacy: () -> Unit,
+    onLicenses: () -> Unit,
     onShare: () -> Unit,
 ) {
     // Not a tap: it fires once the phone has forgotten the driver.
@@ -224,6 +231,8 @@ internal fun SettingsContent(
             GroupTitle(R.string.help_section_about)
             SettingsRow(R.drawable.ic_help, stringResource(R.string.help_title), null, GroupPlace.FIRST, opens = true, onClick = onHelp)
             SettingsRow(R.drawable.ic_share, stringResource(R.string.help_share), stringResource(R.string.help_share_detail), GroupPlace.MIDDLE, onClick = onShare)
+            SettingsRow(R.drawable.ic_shield_person, stringResource(R.string.privacy_title), null, GroupPlace.MIDDLE, opens = true, onClick = onPrivacy)
+            SettingsRow(R.drawable.ic_description, stringResource(R.string.licenses_title), null, GroupPlace.MIDDLE, opens = true, onClick = onLicenses)
             SettingsRow(R.drawable.ic_info, stringResource(R.string.help_version), isolated(version), GroupPlace.LAST)
         }
     }

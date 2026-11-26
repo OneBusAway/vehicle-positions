@@ -110,6 +110,8 @@ class SettingsScreenTest {
         var signedOut = 0
         val themes = mutableListOf<ThemeChoice>()
         var help = 0
+        var privacy = 0
+        var licenses = 0
         var share = 0
     }
 
@@ -143,6 +145,8 @@ class SettingsScreenTest {
                 onSignedOut = { calls.signedOut++ },
                 onChooseTheme = { calls.themes += it },
                 onHelp = { calls.help++ },
+                onPrivacy = { calls.privacy++ },
+                onLicenses = { calls.licenses++ },
                 onShare = { calls.share++ },
             )
         }
@@ -566,6 +570,21 @@ class SettingsScreenTest {
         }
 
         assertEquals(1, calls.offlineMap)
+    }
+
+    @Test
+    fun privacyAndLicensesAreInAbout_andOpenTheirPages() {
+        compose.setContent { Content() }
+        fun row(name: Int) = compose.onNode(hasText(string(name)) and hasClickAction())
+
+        row(R.string.privacy_title).performScrollTo().performClick()
+        row(R.string.licenses_title).performScrollTo().performClick()
+
+        assertEquals(1, calls.privacy)
+        assertEquals(1, calls.licenses)
+        val order = listOf(R.string.help_share, R.string.privacy_title, R.string.licenses_title, R.string.help_version)
+            .map { compose.onNode(hasText(string(it))).fetchSemanticsNode().positionInRoot.y }
+        assertEquals("after Share diagnostics, before Version", order.sorted(), order)
     }
 
     @Test

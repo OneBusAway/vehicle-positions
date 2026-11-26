@@ -193,6 +193,36 @@
     <!-- Under Offline map in Settings, in a few words: where the agency's street map stands on this phone, e.g. "Ready, 48 MB". -->
     <string name="settings_map_ready">Ready, %1$s</string>
     <string name="settings_map_needs_attention">Needs attention</string>
+    <!-- Settings, About: the page on what the app sends and keeps, and the list of the libraries and fonts in the app with their licenses. Each names its page too. -->
+    <string name="privacy_title">Privacy</string>
+    <string name="licenses_title">Licenses</string>
+    <!-- Privacy: the headings over its groups. -->
+    <string name="privacy_group_sent">What is sent</string>
+    <string name="privacy_group_who">Who gets it</string>
+    <string name="privacy_group_kept">What stays on this phone</string>
+    <string name="privacy_group_more">More</string>
+    <!-- Privacy, What is sent: each over what it means. The app takes positions only while a trip runs. -->
+    <string name="privacy_trip">Only during a trip</string>
+    <string name="privacy_trip_detail">Positions from Start trip until End trip. Nothing from before or after.</string>
+    <string name="privacy_position">Where the vehicle is</string>
+    <string name="privacy_position_detail">Position, how accurate it is, speed, direction and time, with the vehicle and the run.</string>
+    <string name="privacy_occupancy">How full it is</string>
+    <string name="privacy_occupancy_detail">Only if you say so on Tracking.</string>
+    <!-- Privacy, Who gets it. -->
+    <string name="privacy_agency">Your agency</string>
+    <!-- Under Your agency: the server's address, e.g. "The server you signed in to, metro.example." -->
+    <string name="privacy_agency_detail">The server you signed in to, %1$s.</string>
+    <string name="privacy_agency_detail_no_server">The server you signed in to.</string>
+    <string name="privacy_riders">Riders</string>
+    <string name="privacy_riders_detail">They see the vehicle, not you.</string>
+    <!-- Privacy, What stays on this phone. Reports with no connection: the ones the app keeps until it can send them. -->
+    <string name="privacy_account">Your email and the server</string>
+    <string name="privacy_account_detail">The email goes when you sign out. The server stays.</string>
+    <string name="privacy_kept">Reports with no connection</string>
+    <string name="privacy_kept_detail">Sent when there is a connection again. Any still here after a day are dropped.</string>
+    <!-- Privacy, More: a link to the agency's own privacy policy, which opens in the phone's browser. -->
+    <string name="privacy_policy">Your agency\'s privacy policy</string>
+    <string name="privacy_policy_detail">Opens in the browser</string>
     <!-- Over the rows about the app itself, such as its language. -->
     <string name="settings_group_app">App</string>
     <!-- The row that names the app's theme, and the title over the list of themes a tap on it opens. -->

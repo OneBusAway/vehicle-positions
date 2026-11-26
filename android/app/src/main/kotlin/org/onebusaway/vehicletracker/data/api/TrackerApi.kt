@@ -26,6 +26,7 @@ interface TrackerApi {
     suspend fun trip(@Path("trip_id") tripId: String): TripGeometryDto
 
     @GET("api/v1/map") suspend fun mapConfig(): MapConfigDto
+    @GET("api/v1/agency") suspend fun agency(): AgencyDto
 }
 
 /**

@@ -279,12 +279,15 @@ OTHER_REFRESH=$(curl -s -X POST "$BASE/api/v1/auth/login" \
    page, or **Permission check**: each thing the app needs is there with
    **Allowed** or a button that fixes it, and no trip starts. Go back. Under
    **During a trip** choose **Always on** and **North up**, and leave them for
-   Check 1, which puts them back. Go back. Tap **Theme**, then **Dark**: the
-   app is dark at once, with **Settings** still open. Put it back to
-   **System**. Tap **Sign out**: "Sign out?" with "The next driver can sign in
-   on this phone." Tap **Sign out** again: **Sign in** opens with the server as
-   one line and the email empty. Back closes the app. The server log has the
-   logout:
+   Check 1, which puts them back. Go back. Tap **Privacy**: what is sent, who
+   gets it (the server `10.0.2.2:8081`) and what stays on this phone, and no
+   link to a privacy policy, as `PRIVACY_POLICY_URL` is unset. Go back. Tap
+   **Licenses**, then **MapLibre Native**: its license in full. Go back twice.
+   Tap **Theme**, then **Dark**: the app is dark at once, with **Settings**
+   still open. Put it back to **System**. Tap **Sign out**: "Sign out?" with
+   "The next driver can sign in on this phone." Tap **Sign out** again: **Sign
+   in** opens with the server as one line and the email empty. Back closes the
+   app. The server log has the logout:
 
    ```bash
    grep '"path":"/api/v1/auth/logout"' /tmp/vt-server.log
