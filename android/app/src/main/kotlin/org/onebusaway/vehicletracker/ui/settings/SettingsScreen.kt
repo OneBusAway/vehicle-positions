@@ -71,6 +71,9 @@ import org.onebusaway.vehicletracker.ui.language.LanguageChooser
 import org.onebusaway.vehicletracker.ui.permissions.Fix
 import org.onebusaway.vehicletracker.ui.permissions.PermissionRow
 import org.onebusaway.vehicletracker.ui.permissions.fixOf
+import org.onebusaway.vehicletracker.ui.permissions.LocationNoticeHost
+import org.onebusaway.vehicletracker.ui.permissions.LocationNoticeViewModel
+import org.onebusaway.vehicletracker.ui.permissions.rememberLocationNotice
 import org.onebusaway.vehicletracker.ui.permissions.rememberPermissionFixes
 import org.onebusaway.vehicletracker.ui.theme.AppTheme
 import java.util.concurrent.atomic.AtomicBoolean
@@ -96,6 +99,7 @@ fun SettingsScreen(
     tripSettingsViewModel: TripSettingsViewModel = hiltViewModel(),
     offlineMapViewModel: OfflineMapViewModel = hiltViewModel(),
     accountViewModel: AccountViewModel = hiltViewModel(),
+    noticeViewModel: LocationNoticeViewModel = hiltViewModel(),
 ) {
     val account by accountViewModel.uiState.collectAsStateWithLifecycle()
     val version by viewModel.version.collectAsStateWithLifecycle()
@@ -110,38 +114,42 @@ fun SettingsScreen(
     val sharing = remember { AtomicBoolean(false) }
 
     val access = rememberPhoneAccess()
-    val fixes = rememberPermissionFixes(onAnswer = access::refresh)
+    val notice = rememberLocationNotice(noticeViewModel)
+    val fixes = rememberPermissionFixes(onAnswer = access::refresh, notice = notice)
     val readiness = readiness(access.value, waiting)
-    SettingsContent(
-        readiness = readiness,
-        locationFix = fixOf(PermissionRow.LOCATION, fixes.onlyInSettings),
-        account = account,
-        version = version,
-        theme = theme,
-        screenOn = (tripSettings ?: TripSettings()).screenOn,
-        offlineMap = (offlineMap as? OfflineMapView.Read)?.map,
-        onBack = onBack,
-        // Only a location that stops a trip has the button.
-        onFix = { fixes.fix(if (readiness.state == ReadinessState.LocationOff) PermissionRow.LOCATION_SERVICES else PermissionRow.LOCATION) },
-        onPermissionCheck = onPermissionCheck,
-        onTripSettings = onTripSettings,
-        onOfflineMap = onOfflineMap,
-        onSignOut = accountViewModel::onSignOut,
-        onSignedOut = onSignedOut,
-        onChooseTheme = { if (viewModel.onChooseTheme(it)) activity?.recreate() },
-        onHelp = onHelp,
-        onShare = {
-            if (sharing.compareAndSet(false, true)) {
-                scope.launch {
-                    try {
-                        context.startActivity(shareIntent(viewModel.diagnostics()))
-                    } finally {
-                        sharing.set(false)
+    // The header's Allow, before Android asks for location.
+    LocationNoticeHost(fixes.noticeFor != null, notice.server, onAgree = fixes::agreeToNotice, onNotNow = fixes::declineNotice) {
+        SettingsContent(
+            readiness = readiness,
+            locationFix = fixOf(PermissionRow.LOCATION, fixes.onlyInSettings),
+            account = account,
+            version = version,
+            theme = theme,
+            screenOn = (tripSettings ?: TripSettings()).screenOn,
+            offlineMap = (offlineMap as? OfflineMapView.Read)?.map,
+            onBack = onBack,
+            // Only a location that stops a trip has the button.
+            onFix = { fixes.fix(if (readiness.state == ReadinessState.LocationOff) PermissionRow.LOCATION_SERVICES else PermissionRow.LOCATION) },
+            onPermissionCheck = onPermissionCheck,
+            onTripSettings = onTripSettings,
+            onOfflineMap = onOfflineMap,
+            onSignOut = accountViewModel::onSignOut,
+            onSignedOut = onSignedOut,
+            onChooseTheme = { if (viewModel.onChooseTheme(it)) activity?.recreate() },
+            onHelp = onHelp,
+            onShare = {
+                if (sharing.compareAndSet(false, true)) {
+                    scope.launch {
+                        try {
+                            context.startActivity(shareIntent(viewModel.diagnostics()))
+                        } finally {
+                            sharing.set(false)
+                        }
                     }
                 }
-            }
-        },
-    )
+            },
+        )
+    }
 }
 
 /**

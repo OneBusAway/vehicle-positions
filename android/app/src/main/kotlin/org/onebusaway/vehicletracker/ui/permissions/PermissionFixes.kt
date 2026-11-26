@@ -44,14 +44,36 @@ internal fun fixOf(row: PermissionRow, onlyInSettings: Set<PermissionRow>): Fix 
 internal fun Set<PermissionRow>.afterAsking(row: PermissionRow, allowed: Boolean, rationale: Boolean): Set<PermissionRow> =
     if (allowed || rationale) this - row else this + row
 
-/** Fixes one row at a time, as the driver taps it: Permission check's, or the one Settings' header names. */
-internal class PermissionFixes(val onlyInSettings: Set<PermissionRow>, private val onFix: (PermissionRow) -> Unit) {
+/**
+ * Fixes one row at a time, as the driver taps it: Permission check's, or the one Settings' header names. [noticeFor] is
+ * the row whose ask waits on the location notice, while it is up.
+ */
+internal class PermissionFixes(
+    val onlyInSettings: Set<PermissionRow>,
+    val noticeFor: PermissionRow? = null,
+    private val onAgree: () -> Unit = {},
+    private val onDecline: () -> Unit = {},
+    private val onFix: (PermissionRow) -> Unit,
+) {
     fun fix(row: PermissionRow) = onFix(row)
+
+    /** Agree on the notice: Android is asked for the row it waited for. */
+    fun agreeToNotice() = onAgree()
+
+    /** Not now, or Back, on the notice: nothing is asked. */
+    fun declineNotice() = onDecline()
 }
 
-/** Asks for nothing until a row is fixed, and then for that row alone. [onAnswer] fires once Android has answered. */
+/** The rows Android asks about with a location prompt, which the location notice comes before. */
+internal val PermissionRow.needsNotice: Boolean
+    get() = this == PermissionRow.LOCATION || this == PermissionRow.PRECISE || this == PermissionRow.BACKGROUND
+
+/**
+ * Asks for nothing until a row is fixed, and then for that row alone. [onAnswer] fires once Android has answered. A
+ * location row waits for the location [notice] until this phone has agreed to it.
+ */
 @Composable
-internal fun rememberPermissionFixes(onAnswer: () -> Unit): PermissionFixes {
+internal fun rememberPermissionFixes(onAnswer: () -> Unit, notice: LocationNoticeState): PermissionFixes {
     val context = LocalContext.current
     val activity = LocalActivity.current
     val latestOnAnswer by rememberUpdatedState(onAnswer)
@@ -59,6 +81,8 @@ internal fun rememberPermissionFixes(onAnswer: () -> Unit): PermissionFixes {
     var onlyInSettings by rememberSaveable { mutableStateOf(emptySet<PermissionRow>()) }
     // Saved with them: the answer to a prompt that was out comes back to the activity that replaces this one.
     var asking by rememberSaveable { mutableStateOf<PermissionRow?>(null) }
+    var noticeFor by rememberSaveable { mutableStateOf<PermissionRow?>(null) }
+    val latestNotice by rememberUpdatedState(notice)
 
     val permissionsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { answers ->
         val row = asking ?: return@rememberLauncherForActivityResult
@@ -89,17 +113,32 @@ internal fun rememberPermissionFixes(onAnswer: () -> Unit): PermissionFixes {
             }
     }
 
-    return PermissionFixes(onlyInSettings) { row ->
+    fun ask(row: PermissionRow) {
+        // One prompt at a time: Android answers a second ask with nothing.
+        if (asking != null) return
+        asking = row
+        permissionsLauncher.launch(permissionsOf(row))
+    }
+
+    return PermissionFixes(
+        onlyInSettings = onlyInSettings,
+        noticeFor = noticeFor,
+        onAgree = {
+            val row = noticeFor
+            noticeFor = null
+            latestNotice.agree()
+            row?.let(::ask)
+        },
+        onDecline = { noticeFor = null },
+    ) { row ->
         when (fixOf(row, onlyInSettings)) {
             Fix.TURN_ON -> turnOnLocation()
             Fix.OPEN_SETTINGS -> context.open(settingsOf(row, context))
             Fix.ALLOW -> when {
                 row == PermissionRow.BATTERY -> context.open(batteryOptimizationIntent(context))
-                // One prompt at a time: Android answers a second ask with nothing.
-                asking == null -> {
-                    asking = row
-                    permissionsLauncher.launch(permissionsOf(row))
-                }
+                // Unread, it shows too: better asked twice than a prompt with no notice before it.
+                row.needsNotice && latestNotice.agreed != true -> noticeFor = row
+                else -> ask(row)
             }
         }
     }

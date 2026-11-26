@@ -76,6 +76,9 @@ internal sealed interface PermissionEvent {
     data object NotificationsAnswered : PermissionEvent
     data object BatteryAnswered : PermissionEvent
     data class LocationServicesChecked(val on: Boolean) : PermissionEvent
+
+    /** The driver left the location notice without agreeing to it, so Android was not asked. */
+    data object NoticeDeclined : PermissionEvent
     data object Cancel : PermissionEvent
 
     /** The trip was handed on once everything was ready. */
@@ -115,6 +118,9 @@ internal fun PermissionFlowState.next(event: PermissionEvent, grants: Grants): P
     return when (step) {
         PermissionStep.IDLE -> this
         PermissionStep.REQUEST_LOCATION -> when {
+            // Back to the checklist, asking nothing: the trip can't start without location, and Continue shows the
+            // notice again.
+            event == PermissionEvent.NoticeDeclined -> PermissionFlowState()
             event !is PermissionEvent.LocationAnswered -> this
             event.fine -> to(afterLocation(grants))
             event.coarse -> to(PermissionStep.APPROX_WARNING)
@@ -135,7 +141,9 @@ internal fun PermissionFlowState.next(event: PermissionEvent, grants: Grants): P
         // Android answers at once from what was set there, with no prompt.
         PermissionStep.OPEN_APP_SETTINGS -> if (event == PermissionEvent.SettingsClosed) to(PermissionStep.REQUEST_LOCATION) else this
         // Refusing background location does not stop the trip: the app only cannot restart reports by itself.
-        PermissionStep.REQUEST_BACKGROUND -> if (event == PermissionEvent.BackgroundAnswered) to(afterBackground(grants)) else this
+        // Nor does leaving the notice before it: it is not asked for, as if refused.
+        PermissionStep.REQUEST_BACKGROUND ->
+            if (event == PermissionEvent.BackgroundAnswered || event == PermissionEvent.NoticeDeclined) to(afterBackground(grants)) else this
         PermissionStep.REQUEST_NOTIFICATIONS -> if (event == PermissionEvent.NotificationsAnswered) to(afterNotifications(grants)) else this
         // Whatever the answer: the exemption only makes reports steadier.
         PermissionStep.REQUEST_BATTERY -> if (event == PermissionEvent.BatteryAnswered) to(PermissionStep.CHECK_LOCATION_SETTINGS) else this

@@ -31,6 +31,7 @@ import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollAction
@@ -57,6 +58,7 @@ import androidx.core.content.IntentCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Rule
@@ -73,6 +75,7 @@ import org.onebusaway.vehicletracker.ui.account.AccountUiState
 import org.onebusaway.vehicletracker.ui.account.LocalOpenSettings
 import org.onebusaway.vehicletracker.ui.permissions.Fix
 import org.onebusaway.vehicletracker.ui.permissions.Grants
+import org.onebusaway.vehicletracker.ui.permissions.LocationNoticeHost
 import org.onebusaway.vehicletracker.ui.settings.OfflineMap
 import org.onebusaway.vehicletracker.ui.settings.PhoneAccess
 import org.onebusaway.vehicletracker.ui.settings.Readiness
@@ -224,6 +227,37 @@ class SettingsScreenTest {
             assertEquals(index + 1, calls.fixes)
         }
         assertEquals("the button is not the header", 0, calls.permissionCheck)
+    }
+
+    // A tap on the notice that misses its buttons used to reach the header under it, and open Permission check unanswered.
+    @Test
+    fun theLocationNoticeOverSettingsTakesEveryTap_andTalkBackReadsOnlyIt() {
+        var notice by mutableStateOf(false)
+        var answered = 0
+        compose.setContent {
+            AppTheme(darkTheme = false) {
+                LocationNoticeHost(notice, "tracker.example.com", onAgree = { answered++ }, onNotNow = { answered++ }) { Content() }
+            }
+        }
+        fun tapTheCornerAndTheHeader() {
+            compose.onRoot().performTouchInput { click(Offset(2f, 2f)) }
+            compose.onRoot().performTouchInput { click(Offset(centerX, 150.dp.toPx())) }
+            compose.waitForIdle()
+        }
+        tapTheCornerAndTheHeader()
+        assertEquals("without the notice, both are the header's", 2, calls.permissionCheck)
+        fun settingsRead() = compose.onAllNodesWithText(string(R.string.permission_check_title)).fetchSemanticsNodes().isNotEmpty()
+        assertTrue("TalkBack reads Settings without the notice", settingsRead())
+
+        notice = true
+        compose.waitForIdle()
+        tapTheCornerAndTheHeader()
+
+        assertEquals("Permission check did not open", 2, calls.permissionCheck)
+        assertEquals("nor did either tap answer the notice", 0, answered)
+        assertFalse("nor Settings under it", settingsRead())
+        val notices = SemanticsMatcher.expectValue(SemanticsProperties.IsTraversalGroup, true) and hasAnyDescendant(hasText(string(R.string.location_notice_title)))
+        assertTrue("the notice is a traversal group of its own", compose.onAllNodes(notices).fetchSemanticsNodes().isNotEmpty())
     }
 
     @Test

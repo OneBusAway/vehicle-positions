@@ -1,25 +1,32 @@
 package org.onebusaway.vehicletracker.ui
 
 import android.Manifest
+import android.os.Build
 import androidx.activity.compose.LocalActivityResultRegistryOwner
 import androidx.activity.result.ActivityResultRegistry
 import androidx.activity.result.ActivityResultRegistryOwner
 import androidx.activity.result.contract.ActivityResultContract
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.core.app.ActivityOptionsCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.onebusaway.vehicletracker.ui.permissions.Grants
 import org.onebusaway.vehicletracker.ui.permissions.PermissionFlowController
 import org.onebusaway.vehicletracker.ui.permissions.PermissionRow
 import org.onebusaway.vehicletracker.ui.permissions.PermissionStep
 import org.onebusaway.vehicletracker.ui.permissions.RowState
+import org.onebusaway.vehicletracker.ui.permissions.grantsOf
 import org.onebusaway.vehicletracker.ui.permissions.rememberPermissionFlow
 
 /**
@@ -52,6 +59,12 @@ class PermissionFlowRestoreTest {
     /** Whether Android would show a rationale for location: true once it has been refused, false once refused for good. */
     private var rationale = false
 
+    /** Whether this phone has agreed to the location notice, which Android's location prompts wait for. */
+    private var noticeAgreed by mutableStateOf<Boolean?>(true)
+
+    /** What the phone has granted, when a test sets it rather than reads the phone's. */
+    private var phone: Grants? = null
+
     /** A run tapped on a phone that has not granted everything yet. */
     private fun showChecklist() {
         val owner = object : ActivityResultRegistryOwner {
@@ -59,7 +72,12 @@ class PermissionFlowRestoreTest {
         }
         restoration.setContent {
             CompositionLocalProvider(LocalActivityResultRegistryOwner provides owner) {
-                flow = rememberPermissionFlow(onReady = {}, showsLocationRationale = { rationale })
+                flow = rememberPermissionFlow(
+                    onReady = {},
+                    noticeAgreed = noticeAgreed,
+                    showsLocationRationale = { rationale },
+                    readGrants = { context -> phone ?: grantsOf(context) },
+                )
             }
         }
         compose.runOnIdle { flow.start() }
@@ -121,6 +139,65 @@ class PermissionFlowRestoreTest {
                 RowState.NEEDED_IN_SETTINGS,
                 flow.checklist.single { it.row == PermissionRow.LOCATION }.state,
             )
+        }
+    }
+
+    @Test
+    fun beforeTheNoticeIsAgreedTo_AndroidIsNotAsked_andAgreeAsks() {
+        noticeAgreed = false
+        showChecklist()
+        compose.runOnIdle { flow.onContinue() }
+
+        compose.runOnIdle {
+            assertTrue(flow.showsNotice(noticeAgreed))
+            assertTrue("nothing asked yet", prompts.asked.isEmpty())
+        }
+        noticeAgreed = true
+        compose.runOnIdle {
+            assertFalse(flow.showsNotice(noticeAgreed))
+            assertTrue(Manifest.permission.ACCESS_FINE_LOCATION in prompts.asked.single().second as Array<*>)
+        }
+    }
+
+    @Test
+    fun notNowGoesBackToTheChecklist_askingNothing_andTheNoticeComesAgainOnContinue() {
+        noticeAgreed = false
+        showChecklist()
+        compose.runOnIdle { flow.onContinue() }
+
+        compose.runOnIdle { flow.declineNotice() }
+
+        compose.runOnIdle {
+            assertTrue(flow.visible)
+            assertEquals(PermissionStep.IDLE, flow.flow.step)
+            assertTrue(prompts.asked.isEmpty())
+        }
+        compose.runOnIdle { flow.onContinue() }
+        compose.runOnIdle {
+            assertTrue(flow.showsNotice(noticeAgreed))
+            assertTrue(prompts.asked.isEmpty())
+        }
+    }
+
+    // Precise location granted in Android's settings while the notice waited: Android answers that ask with no prompt.
+    @Test
+    fun preciseLocationGrantedWhileTheNoticeWaits_goesOnWithoutIt() {
+        val nothingYet = Grants(Build.VERSION.SDK_INT, fine = false, coarse = false, background = false, notifications = false, batteryExempt = false)
+        phone = nothingYet
+        noticeAgreed = false
+        showChecklist()
+        compose.runOnIdle { flow.onContinue() }
+        compose.runOnIdle {
+            assertTrue(flow.showsNotice(noticeAgreed))
+            assertTrue(prompts.asked.isEmpty())
+        }
+
+        phone = nothingYet.copy(fine = true, coarse = true)
+        compose.runOnIdle { flow.refresh() }
+
+        compose.runOnIdle {
+            assertFalse(flow.showsNotice(noticeAgreed))
+            assertTrue("the step is asked again", Manifest.permission.ACCESS_FINE_LOCATION in prompts.asked.single().second as Array<*>)
         }
     }
 }

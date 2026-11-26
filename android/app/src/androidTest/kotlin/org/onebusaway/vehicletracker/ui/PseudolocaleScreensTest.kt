@@ -46,6 +46,7 @@ import org.onebusaway.vehicletracker.ui.permissions.ChecklistRow
 import org.onebusaway.vehicletracker.ui.permissions.Fix
 import org.onebusaway.vehicletracker.ui.permissions.PermissionFixes
 import org.onebusaway.vehicletracker.ui.permissions.Grants
+import org.onebusaway.vehicletracker.ui.permissions.LocationNoticeContent
 import org.onebusaway.vehicletracker.ui.permissions.PermissionRow
 import org.onebusaway.vehicletracker.ui.permissions.PreflightContent
 import org.onebusaway.vehicletracker.ui.permissions.RowState
@@ -290,6 +291,11 @@ class PseudolocaleScreensTest(private val tag: String) {
     fun permissionCheck() = check("permission-check", R.string.permission_check_title) {
         val grants = Grants(sdk = 36, fine = false, coarse = true, background = false, notifications = false, batteryExempt = false)
         PermissionCheckContent(readiness(PhoneAccess(grants, locationServicesOn = true), waiting = null), PermissionFixes(emptySet()) {}, onBack = {})
+    }
+
+    @Test
+    fun locationNotice() = check("location-notice", R.string.location_notice_title) {
+        LocationNoticeContent(server = "metro.example", onAgree = {}, onNotNow = {})
     }
 
     @Test

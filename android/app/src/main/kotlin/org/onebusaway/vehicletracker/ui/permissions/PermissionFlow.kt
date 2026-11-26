@@ -62,6 +62,23 @@ class PermissionFlowController internal constructor(
         private set
 
     internal val checklist: List<ChecklistRow> get() = flow.checklist(grants)
+
+    /**
+     * Android's next prompt is for location or background location, and this phone has not [agreed] to the location
+     * notice, so the ask waits for it. Unread, it waits too. Precise location already granted is answered with no
+     * prompt, as when a run starts with nothing missing, so that ask does not wait.
+     */
+    internal fun waitsOnNotice(agreed: Boolean?): Boolean = agreed != true && when (flow.step) {
+        PermissionStep.REQUEST_LOCATION -> !grants.fine
+        PermissionStep.REQUEST_BACKGROUND -> true
+        else -> false
+    }
+
+    /** The location notice is up in place of Android's prompt ([waitsOnNotice]), once the phone's answer is read. */
+    fun showsNotice(agreed: Boolean?): Boolean = agreed == false && waitsOnNotice(agreed)
+
+    /** Not now, or Back, on the notice. */
+    fun declineNotice() = dispatch(PermissionEvent.NoticeDeclined)
     internal val canContinue: Boolean get() = flow.continueEvent != null
 
     internal fun dispatch(event: PermissionEvent) {
@@ -146,20 +163,29 @@ internal fun locationServicesOn(context: Context): Boolean =
 /**
  * Runs the sequence in [next] that must pass before a trip can start, launching Android's prompts as the steps reach
  * them while the checklist stays on screen beneath. [onReady] fires once every step has been granted, or declined where
- * declining is allowed.
+ * declining is allowed. Location and background location wait for the location notice until this phone has
+ * [noticeAgreed] to it ([PermissionFlowController.showsNotice]).
  */
 @Composable
-fun rememberPermissionFlow(onReady: () -> Unit): PermissionFlowController {
+fun rememberPermissionFlow(onReady: () -> Unit, noticeAgreed: Boolean?): PermissionFlowController {
     val activity = LocalActivity.current
-    return rememberPermissionFlow(onReady, showsLocationRationale = { activity.showsLocationRationale() })
+    return rememberPermissionFlow(onReady, noticeAgreed, showsLocationRationale = { activity.showsLocationRationale() })
 }
 
-/** [showsLocationRationale] is Android's rationale for location, which a test cannot set by refusing a real prompt. */
+/**
+ * [showsLocationRationale] is Android's rationale for location, and [readGrants] what the phone has granted, which a
+ * test cannot set by answering a real prompt.
+ */
 @Composable
-internal fun rememberPermissionFlow(onReady: () -> Unit, showsLocationRationale: () -> Boolean): PermissionFlowController {
+internal fun rememberPermissionFlow(
+    onReady: () -> Unit,
+    noticeAgreed: Boolean?,
+    showsLocationRationale: () -> Boolean,
+    readGrants: (Context) -> Grants = ::grantsOf,
+): PermissionFlowController {
     val context = LocalContext.current
-    val controller = rememberSaveable(saver = permissionFlowSaver { grantsOf(context) }) {
-        PermissionFlowController { grantsOf(context) }
+    val controller = rememberSaveable(saver = permissionFlowSaver { readGrants(context) }) {
+        PermissionFlowController { readGrants(context) }
     }
     val latestOnReady by rememberUpdatedState(onReady)
 
@@ -206,9 +232,12 @@ internal fun rememberPermissionFlow(onReady: () -> Unit, showsLocationRationale:
         onPauseOrDispose {}
     }
 
-    LaunchedEffect(controller.flow.step) {
+    // Again once the step stops waiting on the notice: agreed to, or precise location granted meanwhile in Android's
+    // settings, which needs no prompt.
+    LaunchedEffect(controller.flow.step, controller.waitsOnNotice(noticeAgreed)) {
         // Restored with Android still asking: its answer comes back to the launchers here, so it is not asked twice.
         if (controller.asking) return@LaunchedEffect
+        if (controller.waitsOnNotice(noticeAgreed)) return@LaunchedEffect
         when (controller.flow.step) {
             PermissionStep.REQUEST_LOCATION -> {
                 rationaleBeforeAsk = showsLocationRationale()
