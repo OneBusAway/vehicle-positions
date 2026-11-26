@@ -2557,22 +2557,23 @@ func (q *Queries) SetRiderTier(ctx context.Context, arg SetRiderTierParams) erro
 
 const setUserActive = `-- name: SetUserActive :execrows
 UPDATE users
-SET active = $2,
-    sessions_valid_after = CASE WHEN $2 THEN sessions_valid_after ELSE clock_timestamp() END
-WHERE id = $1
+SET active = $1,
+    sessions_valid_after = CASE WHEN $1 THEN sessions_valid_after
+        ELSE GREATEST(sessions_valid_after, $2) END
+WHERE id = $3
 `
 
 type SetUserActiveParams struct {
-	ID     int64
-	Active bool
+	Active  bool
+	EndedAt pgtype.Timestamptz
+	ID      int64
 }
 
-// Deactivation ends every token issued before it (sessions_valid_after), so
-// reactivating the user cannot revive them. clock_timestamp(), under the lock
-// GetUserForUpdate took, is after any sign-in or refresh that held it up, where
-// NOW() is when the wait for them began.
+// Deactivation ends every token issued up to ended_at (sessions_valid_after),
+// unless one already ended later, so reactivating the user cannot revive them.
+// ended_at as UpdateUser has it.
 func (q *Queries) SetUserActive(ctx context.Context, arg SetUserActiveParams) (int64, error) {
-	result, err := q.db.Exec(ctx, setUserActive, arg.ID, arg.Active)
+	result, err := q.db.Exec(ctx, setUserActive, arg.Active, arg.EndedAt, arg.ID)
 	if err != nil {
 		return 0, err
 	}
@@ -2740,16 +2741,17 @@ func (q *Queries) UpdateRideProgress(ctx context.Context, arg UpdateRideProgress
 const updateUser = `-- name: UpdateUser :one
 UPDATE users
 SET name = $1, email = lower($2), role = $3,
-    sessions_valid_after = CASE WHEN role <> $3 THEN NOW() ELSE sessions_valid_after END
-WHERE id = $4
+    sessions_valid_after = CASE WHEN role <> $3 THEN GREATEST(sessions_valid_after, $4) ELSE sessions_valid_after END
+WHERE id = $5
 RETURNING id, name, email, role, active, created_at, updated_at, last_seen_at
 `
 
 type UpdateUserParams struct {
-	Name  string
-	Email string
-	Role  string
-	ID    int64
+	Name    string
+	Email   string
+	Role    string
+	EndedAt pgtype.Timestamptz
+	ID      int64
 }
 
 type UpdateUserRow struct {
@@ -2764,15 +2766,18 @@ type UpdateUserRow struct {
 }
 
 // updated_at is maintained by the set_users_updated_at trigger. A role change
-// ends every token issued before it (sessions_valid_after), so giving the old
-// role back later cannot revive them. The role read in the CASE is the row's
-// value before this update. The email is stored lower-case, as CreateUser
+// ends every token issued up to ended_at (sessions_valid_after), unless one
+// already ended later, so giving the old role back later cannot revive them.
+// ended_at is read under GetUserForUpdate's lock from the clock tokens are
+// issued by (Store.now), so a sign-in or refresh it waited for is before it.
+// The role read in the CASE is the row's value before this update. The email is stored lower-case, as CreateUser
 // stores it.
 func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (UpdateUserRow, error) {
 	row := q.db.QueryRow(ctx, updateUser,
 		arg.Name,
 		arg.Email,
 		arg.Role,
+		arg.EndedAt,
 		arg.ID,
 	)
 	var i UpdateUserRow

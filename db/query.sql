@@ -70,13 +70,15 @@ RETURNING id, name, email, role, active, created_at, updated_at;
 
 -- name: UpdateUser :one
 -- updated_at is maintained by the set_users_updated_at trigger. A role change
--- ends every token issued before it (sessions_valid_after), so giving the old
--- role back later cannot revive them. The role read in the CASE is the row's
--- value before this update. The email is stored lower-case, as CreateUser
+-- ends every token issued up to ended_at (sessions_valid_after), unless one
+-- already ended later, so giving the old role back later cannot revive them.
+-- ended_at is read under GetUserForUpdate's lock from the clock tokens are
+-- issued by (Store.now), so a sign-in or refresh it waited for is before it.
+-- The role read in the CASE is the row's value before this update. The email is stored lower-case, as CreateUser
 -- stores it.
 UPDATE users
 SET name = sqlc.arg(name), email = lower(sqlc.arg(email)), role = sqlc.arg(role),
-    sessions_valid_after = CASE WHEN role <> sqlc.arg(role) THEN NOW() ELSE sessions_valid_after END
+    sessions_valid_after = CASE WHEN role <> sqlc.arg(role) THEN GREATEST(sessions_valid_after, sqlc.arg(ended_at)) ELSE sessions_valid_after END
 WHERE id = sqlc.arg(id)
 RETURNING id, name, email, role, active, created_at, updated_at, last_seen_at;
 
@@ -84,14 +86,14 @@ RETURNING id, name, email, role, active, created_at, updated_at, last_seen_at;
 DELETE FROM users WHERE id = $1;
 
 -- name: SetUserActive :execrows
--- Deactivation ends every token issued before it (sessions_valid_after), so
--- reactivating the user cannot revive them. clock_timestamp(), under the lock
--- GetUserForUpdate took, is after any sign-in or refresh that held it up, where
--- NOW() is when the wait for them began.
+-- Deactivation ends every token issued up to ended_at (sessions_valid_after),
+-- unless one already ended later, so reactivating the user cannot revive them.
+-- ended_at as UpdateUser has it.
 UPDATE users
-SET active = $2,
-    sessions_valid_after = CASE WHEN $2 THEN sessions_valid_after ELSE clock_timestamp() END
-WHERE id = $1;
+SET active = sqlc.arg(active),
+    sessions_valid_after = CASE WHEN sqlc.arg(active) THEN sessions_valid_after
+        ELSE GREATEST(sessions_valid_after, sqlc.arg(ended_at)) END
+WHERE id = sqlc.arg(id);
 
 -- name: UpdateUserPassword :execrows
 UPDATE users SET password_hash = $2 WHERE id = $1;

@@ -172,7 +172,7 @@ func TestStore_SignIn_WaitsForAChange(t *testing.T) {
 // TestStore_ChangeEndsASignInItWaitedFor: a change that ends an account's
 // sign-ins and waited for one to be done ends that one too: its token is refused
 // for good, when the account is active in its role again, and its refresh token
-// is gone.
+// is gone. So too when this server's clock and the database's disagree.
 func TestStore_ChangeEndsASignInItWaitedFor(t *testing.T) {
 	store := newAuditTestStore(t)
 	ctx, cancel := context.WithTimeout(asTestAdmin(), 60*time.Second)
@@ -203,46 +203,58 @@ func TestStore_ChangeEndsASignInItWaitedFor(t *testing.T) {
 			return err
 		}, true, false},
 	}
-	for _, way := range signInStores {
-		for _, tt := range tests {
-			t.Run(way.name+": "+tt.name, func(t *testing.T) {
-				fx := newAuditFixture(t, store)
-				user := checkedUser(t, store, fx.userID)
-				change := tt.change(t, fx.userID)
-				pid, commit := holdUser(t, fx.userID, "SELECT 1 FROM users WHERE id = $1 FOR UPDATE")
+	skews := []struct {
+		name string
+		by   time.Duration
+	}{
+		{"", 0},
+		{"this server's clock ahead, ", 2 * time.Second},
+		{"this server's clock behind, ", -2 * time.Second},
+	}
+	for _, skew := range skews {
+		for _, way := range signInStores {
+			for _, tt := range tests {
+				t.Run(skew.name+way.name+": "+tt.name, func(t *testing.T) {
+					store.clock = func() time.Time { return time.Now().Add(skew.by) }
+					t.Cleanup(func() { store.clock = nil })
+					fx := newAuditFixture(t, store)
+					user := checkedUser(t, store, fx.userID)
+					change := tt.change(t, fx.userID)
+					pid, commit := holdUser(t, fx.userID, "SELECT 1 FROM users WHERE id = $1 FOR UPDATE")
 
-				type result struct {
-					at  time.Time
-					err error
-				}
-				signedIn, changed := make(chan result, 1), make(chan error, 1)
-				go func() {
-					at, err := way.signIn(ctx, store, user, "aud-hash")
-					signedIn <- result{at, err}
-				}()
-				require.Eventually(t, func() bool { return blockedBehind(store, pid, 1) == 1 },
-					5*time.Second, 10*time.Millisecond, "the sign-in never waited")
-				go func() { changed <- change() }()
-				require.Eventually(t, func() bool { return blockedBehind(store, pid, 1)+blockedBehind(store, pid, 2) >= 2 },
-					5*time.Second, 10*time.Millisecond, "the change never queued behind the sign-in")
-				commit()
-
-				got := <-signedIn
-				require.NoError(t, got.err)
-				require.NoError(t, <-changed)
-				require.NoError(t, tt.undo(fx.userID))
-
-				good, err := store.IsUserActiveInRole(ctx, fx.userID, roleDriver, got.at)
-				require.NoError(t, err)
-				assert.Equal(t, !tt.endsToken, good, "its token")
-				if way.keeps {
-					want := 1
-					if tt.endsRefresh {
-						want = 0
+					type result struct {
+						at  time.Time
+						err error
 					}
-					assert.Equal(t, want, countRefreshRows(t, store, "aud-hash"), "its refresh token")
-				}
-			})
+					signedIn, changed := make(chan result, 1), make(chan error, 1)
+					go func() {
+						at, err := way.signIn(ctx, store, user, "aud-hash")
+						signedIn <- result{at, err}
+					}()
+					require.Eventually(t, func() bool { return blockedBehind(store, pid, 1) == 1 },
+						5*time.Second, 10*time.Millisecond, "the sign-in never waited")
+					go func() { changed <- change() }()
+					require.Eventually(t, func() bool { return blockedBehind(store, pid, 1)+blockedBehind(store, pid, 2) >= 2 },
+						5*time.Second, 10*time.Millisecond, "the change never queued behind the sign-in")
+					commit()
+
+					got := <-signedIn
+					require.NoError(t, got.err)
+					require.NoError(t, <-changed)
+					require.NoError(t, tt.undo(fx.userID))
+
+					good, err := store.IsUserActiveInRole(ctx, fx.userID, roleDriver, got.at)
+					require.NoError(t, err)
+					assert.Equal(t, !tt.endsToken, good, "its token")
+					if way.keeps {
+						want := 1
+						if tt.endsRefresh {
+							want = 0
+						}
+						assert.Equal(t, want, countRefreshRows(t, store, "aud-hash"), "its refresh token")
+					}
+				})
+			}
 		}
 	}
 }

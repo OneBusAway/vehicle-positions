@@ -30,6 +30,20 @@ var migrationsFS embed.FS
 type Store struct {
 	pool    *pgxpool.Pool
 	queries *db.Queries
+	// clock is what every time compared with a token's issue time is read from,
+	// under the user lock: a sign-in's, a refresh's, and the time each change
+	// that ends sign-ins stamps. One clock, so that skew between this server and
+	// the database can't put them out of order. Nil is time.Now; a test sets it
+	// off the database's clock.
+	clock func() time.Time
+}
+
+// now reads the store's clock.
+func (s *Store) now() time.Time {
+	if s.clock == nil {
+		return time.Now()
+	}
+	return s.clock()
 }
 
 // NewStore connects to PostgreSQL.

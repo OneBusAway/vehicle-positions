@@ -158,7 +158,7 @@ func (s *Store) RotateRefreshToken(ctx context.Context, usedID int64, newHash st
 		}
 		return time.Time{}, false, fmt.Errorf("lock user: %w", err)
 	}
-	rotatedAt = time.Now()
+	rotatedAt = s.now()
 
 	rows, err := qtx.MarkRefreshTokenUsed(ctx, usedID)
 	if err != nil {
@@ -295,8 +295,12 @@ func (s *Store) SetUserActiveAndRevokeSessions(ctx context.Context, id int64, ac
 		return fmt.Errorf("lock user: %w", err)
 	}
 
-	// The lock holds the row, so the update cannot miss it.
-	if _, err := qtx.SetUserActive(ctx, db.SetUserActiveParams{ID: id, Active: active}); err != nil {
+	// The lock holds the row, so the update cannot miss it. The time is read
+	// under the lock too: a sign-in or a refresh it waited for counts as before
+	// it, by the same clock.
+	if _, err := qtx.SetUserActive(ctx, db.SetUserActiveParams{
+		ID: id, Active: active, EndedAt: pgtype.Timestamptz{Time: s.now(), Valid: true},
+	}); err != nil {
 		return fmt.Errorf("set user active: %w", err)
 	}
 

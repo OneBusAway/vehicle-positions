@@ -844,3 +844,23 @@ func TestHashRefreshToken(t *testing.T) {
 	assert.NotContains(t, hash, token)
 	assert.NotEqual(t, hash, hashRefreshToken(other))
 }
+
+// TestStore_RotateRefreshToken_ByTheStoresClock: a refresh counts as done at the
+// time the store's clock gives, the one every change that ends sign-ins stamps.
+func TestStore_RotateRefreshToken_ByTheStoresClock(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	userID := insertRefreshTestUser(t, store)
+	_, hash := newStoredRefreshToken(t, store, userID, time.Now().Add(time.Hour))
+	token, err := store.GetRefreshToken(ctx, hash)
+	require.NoError(t, err)
+	at := time.Now().Add(-37 * time.Minute)
+	store.clock = func() time.Time { return at }
+
+	_, next := newRefreshHash(t)
+	rotatedAt, rotated, err := store.RotateRefreshToken(ctx, token.ID, next, userID, time.Now().Add(time.Hour))
+
+	require.NoError(t, err)
+	require.True(t, rotated)
+	assert.True(t, rotatedAt.Equal(at), "rotated at %s, not %s", rotatedAt, at)
+}
