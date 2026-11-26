@@ -634,8 +634,8 @@ class MapRepositoryTest {
         assertEquals(MapFileState.None, repository.state.value)
     }
 
-    // A refresh stopped while it waits for the last one to stop no longer waits for it, so the one after can start
-    // while the first is still stopping.
+    // A refresh stopped while it waits for the last one to stop still waits for it, so the one after never starts while
+    // the first is still stopping.
     @Test fun `the next check waits for the last one to stop, even past a refresh stopped while it waited`() = runTest {
         setUp()
         fetcher.steps += FakeFetcher.Step { _, _, onProgress ->
@@ -964,6 +964,42 @@ class MapRepositoryTest {
 
         assertEquals(MapFileState.Deleted, repository.state.value)
         assertFalse(map.exists())
+    }
+
+    /** A map that is here and current, whose delete could not be saved. */
+    private suspend fun TestScope.deleteThatFailed(checkedAt: Long = clock): Pair<MapRepository, File> {
+        val map = mapHere(checkedAt = checkedAt)
+        val repository = started()
+        val blocker = File(dir, "map.json.tmp").apply { mkdir() }
+        repository.delete()
+        settle()
+        assertEquals(MapFileState.Ready(map, deleteFailed = true), repository.state.value)
+        blocker.delete()
+        return repository to map
+    }
+
+    // Checked within the day, it asks nobody, and used to leave the line.
+    @Test fun `a delete that could not be saved stops saying so once a later check has run`() = runTest {
+        setUp()
+        val (repository, map) = deleteThatFailed()
+
+        repository.refresh()
+        settle()
+
+        assertEquals(MapFileState.Ready(map), repository.state.value)
+        assertTrue("nobody asked", fetcher.requests.isEmpty())
+    }
+
+    @Test fun `nor does a check that fails quietly keep it`() = runTest {
+        setUp()
+        val (repository, map) = deleteThatFailed(checkedAt = clock - day)
+        fetcher.steps += fetcher.fail(MapFailure.NETWORK)
+
+        repository.refresh()
+        settle()
+
+        assertEquals(MapFileState.Ready(map), repository.state.value)
+        assertEquals(1, fetcher.requests.size)
     }
 
     @Test fun `with a map open, its file stays until the next start`() = runTest {
