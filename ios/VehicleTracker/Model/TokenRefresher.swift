@@ -145,6 +145,24 @@ actor TokenRefresher {
         return observedToken
     }
 
+    /// The refresh token to send in a request that names it, the password
+    /// change, read once no trade is out: one out may be spending it. Nil when
+    /// there is none, or another driver has signed in since.
+    func settledRefreshToken(signInID: UUID?) async -> String? {
+        while let inFlight {
+            _ = await inFlight.task.value
+        }
+        guard let stored = try? tokens.load(), stored.signInID == signInID else { return nil }
+        return stored.refreshToken
+    }
+
+    /// Trades the stored refresh token now, as after a 401: for a request the
+    /// server turned away because the refresh token it named had been spent.
+    func refreshNow(signInID: UUID?, refresh: @escaping Refresh) async -> Outcome {
+        guard let stored = try? tokens.load() else { return .unreachable("the stored sign-in could not be read") }
+        return await afterUnauthorized(failedToken: stored.token, signInID: signInID, refresh: refresh)
+    }
+
     private func earlyTradesAreHeld(for signInID: UUID?) -> Bool {
         guard let earlyTradesHeld, earlyTradesHeld.signInID == signInID else { return false }
         return now() < earlyTradesHeld.until

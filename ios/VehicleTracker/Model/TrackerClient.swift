@@ -82,6 +82,37 @@ nonisolated final class TrackerClient: TrackerAPI, Sendable {
     /// `path` with `id` after it as one segment. A GTFS id can hold a "/",
     /// which `appending(path:)` leaves as a separator, so the server sees
     /// another path and answers 404; it reads "%2F" back as part of the id.
+    /// `POST /api/v1/auth/password`, with this phone's refresh token, which
+    /// the server keeps good while it ends every other sign-in. The token is
+    /// read once no refresh is out, as one out may be spending it. A 409 says
+    /// it was spent on the way all the same, by a refresh for another request:
+    /// then a refresh, and the change once more with the new token.
+    func changePassword(current: String, new: String) async throws {
+        for attempt in 1...2 {
+            // With no refresh token this sign-in can't outlive the change, so
+            // it ends here as a 401's would.
+            guard let stored = try? tokens.load(),
+                  let refreshToken = await refreshTokenToSend(stored) else { throw APIError.status(401, message: "") }
+            let body = try encode(ChangePasswordRequest(currentPassword: current, newPassword: new, refreshToken: refreshToken))
+            do {
+                _ = try await send("POST", "api/v1/auth/password", body: body)
+                return
+            } catch APIError.status(409, let message) {
+                guard attempt == 1, let refresher else { throw APIError.status(409, message: message) }
+                switch await refresher.refreshNow(signInID: stored.signInID, refresh: { [self] in await refresh($0) }) {
+                case .retry: continue
+                case .refused: throw APIError.status(401, message: "")
+                case .unreachable(let reason): throw APIError.transport(reason)
+                }
+            }
+        }
+    }
+
+    private func refreshTokenToSend(_ stored: StoredToken) async -> String? {
+        guard let refresher else { return stored.refreshToken }
+        return await refresher.settledRefreshToken(signInID: stored.signInID)
+    }
+
     private func url(_ path: String, id: String) -> URL {
         baseURL.appending(path: path).appending(component: id)
     }

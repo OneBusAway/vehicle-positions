@@ -3,8 +3,8 @@ import SwiftUI
 /// Vehicle → route → trip. One navigation stack whose path the vehicle
 /// screen can push onto when there is only one vehicle to choose. Settings
 /// goes on top of whichever step the account button opened it from, and
-/// Permission check, During a trip, Help, Privacy and Licenses on top of
-/// Settings, and a license on top of Licenses.
+/// Permission check, During a trip, Change password, Help, Privacy and
+/// Licenses on top of Settings, and a license on top of Licenses.
 enum PickerRoute: Hashable {
     case routes(Vehicle)
     case trips(Vehicle, RouteInfo)
@@ -15,6 +15,7 @@ enum PickerRoute: Hashable {
     case privacy
     case licenses
     case license(License)
+    case changePassword
 }
 
 struct PickerFlow: View {
@@ -24,6 +25,8 @@ struct PickerFlow: View {
     /// loads again as the path empties onto it: a 403 means the driver's
     /// vehicles changed after that screen loaded. Back leaves it as it was.
     @State private var vehicleReload = 0
+    /// Change password went through, and back on Settings an alert says so.
+    @State private var passwordChanged = false
 
     /// The account button's Settings, on whichever step it is opened from.
     private var showSettings: ShowSettingsAction {
@@ -54,12 +57,22 @@ struct PickerFlow: View {
                             LicensesView()
                         case .license(let license):
                             LicenseView(license: license)
+                        case .changePassword:
+                            ChangePasswordView {
+                                path.removeLast()
+                                passwordChanged = true
+                            }
                         }
                     }
                     // A pushed step is not inside the first one: each needs it.
                     .environment(\.showSettings, showSettings)
                 }
                 .environment(\.showSettings, showSettings)
+        }
+        // With no button of its own, the alert has iOS's OK.
+        .alert(ChangePasswordText.changed, isPresented: $passwordChanged) {
+        } message: {
+            Text(ChangePasswordText.changedDetail)
         }
         .modifier(PickersTipHost())
     }

@@ -69,7 +69,8 @@ struct SignInView: View {
                             .disabled(isAgain)
                     }
                     LabeledField(label: SignInText.password, error: form.fieldError(for: .password)) {
-                        PasswordField(text: $password, focus: $focus, error: form.fieldError(for: .password), onSubmit: signIn)
+                        PasswordField(name: SignInText.password, text: $password, focus: $focus, field: .password,
+                                      error: form.fieldError(for: .password), onSubmit: signIn)
                     }
                 }
                 .disabled(form.isSigningIn)

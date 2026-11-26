@@ -14,4 +14,5 @@ nonisolated protocol TrackerAPI: Sendable {
     func postLocation(_ report: LocationReport) async throws
     func postLocationHistory(_ request: LocationHistoryRequest) async throws
     func agency() async throws -> AgencyInfo
+    func changePassword(current: String, new: String) async throws
 }
