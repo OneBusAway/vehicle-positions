@@ -203,7 +203,7 @@ a route or set points interactively.)
 Run checks 1-5 in order against a single trip; check 5 ends it. Check 1b runs
 at Check 1's run step and leaves the same driver signed in. Check 1c starts on
 a fresh install, before Check 1 signs in, and finishes at Check 1 and Check 4b.
-Check 6 tries
+Check 5b needs Check 2d's map and runs after Check 5. Check 6 tries
 to restart the server without a schedule and needs no trip at all. Check 2b
 needs a run scheduled around now, so it has its own setup and its own trips: run
 it on its own, before or after the rest.
@@ -937,6 +937,43 @@ curl -s '$BASE/gtfs-rt/vehicle-positions?format=json'
 
 The vehicle's entity should disappear from `entity[]` once its last report
 ages past the threshold (around 5 minutes with the default configuration).
+
+### Check 5b: The offline map in Settings
+
+Run this after Check 5, with the map from Check 2d on the phone, its file still
+served, and airplane mode off.
+
+1. Tap the account button, then **Offline map** under **This phone**.
+
+   **Expected outcome:** the row said **Ready** and the file's size. The page
+   shows the map's picture over **Ready**, "Tracking has streets with no
+   connection", then **Size**, **Fetched** (today) and **Last checked**
+   (**Today** and a time), **Get it again** and **Delete from this phone**.
+
+2. Tap **Get it again**.
+
+   **Expected outcome:** **Downloading** and a percentage, how much of the file
+   has come, and a bar, then **Ready** again. The `http.server` from Check 2d
+   logs a `GET /smoke.pmtiles` answered `200`.
+
+3. Tap **Delete from this phone**: "Delete the map?" with "Tracking then shows
+   the route and its stops without streets, until you get the map again." Tap
+   **Delete**.
+
+   **Expected outcome:** **Not on this phone**, "You deleted it", and **Get the
+   map**. The map's directory holds only its record:
+
+   ```bash
+   adb shell run-as org.onebusaway.vehicletracker ls no_backup/map
+   # map.json
+   ```
+
+   Force-stop the app and open it again: Settings still says **Not on this
+   phone**, and `http.server` logs no new request for the file.
+
+4. Tap **Get the map**.
+
+   **Expected outcome:** it downloads as in step 2, and the page says **Ready**.
 
 ### Check 6 — The server refuses to start without a schedule
 

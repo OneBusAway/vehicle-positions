@@ -1,6 +1,7 @@
 package org.onebusaway.vehicletracker.ui.settings
 
 import android.content.Intent
+import android.text.format.Formatter
 import androidx.activity.compose.LocalActivity
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
@@ -81,17 +82,19 @@ private const val STACKS_FROM_TEXT = 1.3f
 
 /**
  * Settings, opened from the account button: whether this phone can report a trip, who is signed in and Sign out, what the
- * app is allowed and does during a trip, its language and theme, Help and the build. [onSignedOut] is the phone having forgotten the driver.
+ * app is allowed and does during a trip, the agency's offline map, its language and theme, Help and the build. [onSignedOut] is the phone having forgotten the driver.
  */
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
     onPermissionCheck: () -> Unit,
     onTripSettings: () -> Unit,
+    onOfflineMap: () -> Unit,
     onHelp: () -> Unit,
     onSignedOut: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
     tripSettingsViewModel: TripSettingsViewModel = hiltViewModel(),
+    offlineMapViewModel: OfflineMapViewModel = hiltViewModel(),
     accountViewModel: AccountViewModel = hiltViewModel(),
 ) {
     val account by accountViewModel.uiState.collectAsStateWithLifecycle()
@@ -99,6 +102,7 @@ fun SettingsScreen(
     val waiting by viewModel.waiting.collectAsStateWithLifecycle()
     val theme by viewModel.theme.collectAsStateWithLifecycle()
     val tripSettings by tripSettingsViewModel.settings.collectAsStateWithLifecycle()
+    val offlineMap by offlineMapViewModel.map.collectAsStateWithLifecycle()
     val activity = LocalActivity.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -115,11 +119,13 @@ fun SettingsScreen(
         version = version,
         theme = theme,
         screenOn = (tripSettings ?: TripSettings()).screenOn,
+        offlineMap = (offlineMap as? OfflineMapView.Read)?.map,
         onBack = onBack,
         // Only a location that stops a trip has the button.
         onFix = { fixes.fix(if (readiness.state == ReadinessState.LocationOff) PermissionRow.LOCATION_SERVICES else PermissionRow.LOCATION) },
         onPermissionCheck = onPermissionCheck,
         onTripSettings = onTripSettings,
+        onOfflineMap = onOfflineMap,
         onSignOut = accountViewModel::onSignOut,
         onSignedOut = onSignedOut,
         onChooseTheme = { if (viewModel.onChooseTheme(it)) activity?.recreate() },
@@ -158,10 +164,12 @@ internal fun SettingsContent(
     version: String,
     theme: ThemeChoice,
     screenOn: ScreenOn,
+    offlineMap: OfflineMap?,
     onBack: () -> Unit,
     onFix: () -> Unit,
     onPermissionCheck: () -> Unit,
     onTripSettings: () -> Unit,
+    onOfflineMap: () -> Unit,
     onSignOut: () -> Unit,
     onSignedOut: () -> Unit,
     onChooseTheme: (ThemeChoice) -> Unit,
@@ -191,10 +199,12 @@ internal fun SettingsContent(
                 icon = R.drawable.ic_near_me,
                 title = stringResource(R.string.trip_settings_title),
                 detail = stringResource(if (screenOn == ScreenOn.ALWAYS) R.string.settings_screen_always else R.string.settings_screen_charging),
-                place = GroupPlace.LAST,
+                place = if (offlineMap == null) GroupPlace.LAST else GroupPlace.MIDDLE,
                 opens = true,
                 onClick = onTripSettings,
             )
+            // Not there when the agency has no map.
+            offlineMap?.let { OfflineMapRow(it, onOfflineMap) }
             GroupTitle(R.string.settings_group_app)
             LanguageChooser { shown, opensPhoneSettings, onClick ->
                 SettingsRow(
@@ -285,6 +295,25 @@ private fun PermissionCheckRow(state: ReadinessState, onClick: () -> Unit) {
         place = GroupPlace.FIRST,
         opens = true,
         iconTint = if (allAllowed) Color.Unspecified else AppTheme.problemColors.iconOnSurface,
+        onClick = onClick,
+    )
+}
+
+/** The agency's street map on this phone, in a few words. */
+@Composable
+private fun OfflineMapRow(map: OfflineMap, onClick: () -> Unit) {
+    SettingsRow(
+        icon = R.drawable.ic_map,
+        title = stringResource(R.string.offline_map_title),
+        detail = when (map) {
+            is OfflineMap.Ready -> stringResource(R.string.settings_map_ready, Formatter.formatShortFileSize(LocalContext.current, map.details.bytes))
+            is OfflineMap.Downloading -> stringResource(R.string.offline_map_downloading, map.percent)
+            OfflineMap.Deleted -> stringResource(R.string.offline_map_deleted)
+            is OfflineMap.NoSpace, is OfflineMap.NotDownloaded, is OfflineMap.Unusable -> stringResource(R.string.settings_map_needs_attention)
+        },
+        place = GroupPlace.LAST,
+        opens = true,
+        iconTint = if (map.needsAttention) AppTheme.problemColors.iconOnSurface else Color.Unspecified,
         onClick = onClick,
     )
 }

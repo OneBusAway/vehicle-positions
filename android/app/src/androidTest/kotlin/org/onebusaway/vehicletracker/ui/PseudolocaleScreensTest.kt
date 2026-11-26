@@ -33,6 +33,7 @@ import org.onebusaway.vehicletracker.data.TripSettings
 import org.onebusaway.vehicletracker.data.TrackingProblem
 import org.onebusaway.vehicletracker.data.TrackingState
 import org.onebusaway.vehicletracker.data.api.VehicleDto
+import org.onebusaway.vehicletracker.data.map.MapDetails
 import org.onebusaway.vehicletracker.engine.AdherenceThresholds
 import org.onebusaway.vehicletracker.engine.GeoPoint
 import org.onebusaway.vehicletracker.engine.TripGeometry
@@ -65,6 +66,8 @@ import org.onebusaway.vehicletracker.ui.runs.RunsScreenContent
 import org.onebusaway.vehicletracker.ui.runs.RunsUiState
 import org.onebusaway.vehicletracker.ui.runs.TripRun
 import org.onebusaway.vehicletracker.ui.runs.runBoardTipText
+import org.onebusaway.vehicletracker.ui.settings.OfflineMap
+import org.onebusaway.vehicletracker.ui.settings.OfflineMapContent
 import org.onebusaway.vehicletracker.ui.settings.PermissionCheckContent
 import org.onebusaway.vehicletracker.ui.settings.PhoneAccess
 import org.onebusaway.vehicletracker.ui.settings.SettingsContent
@@ -268,13 +271,19 @@ class PseudolocaleScreensTest(private val tag: String) {
             version = "0.1.0 (1)",
             theme = ThemeChoice.SYSTEM,
             screenOn = ScreenOn.CHARGING,
-            onBack = {}, onFix = {}, onPermissionCheck = {}, onTripSettings = {}, onSignOut = {}, onSignedOut = {}, onChooseTheme = {}, onHelp = {}, onShare = {},
+            offlineMap = OfflineMap.Ready(MapDetails(48_000_000, 1_789_000_000_000L, 1_790_000_000L)),
+            onBack = {}, onFix = {}, onPermissionCheck = {}, onTripSettings = {}, onOfflineMap = {}, onSignOut = {}, onSignedOut = {}, onChooseTheme = {}, onHelp = {}, onShare = {},
         )
     }
 
     @Test
     fun duringATrip() = check("during-a-trip", R.string.trip_settings_title) {
         TripSettingsContent(TripSettings(), onBack = {}, onScreenOn = {}, onMapUp = {}, onVibrates = {})
+    }
+
+    @Test
+    fun offlineMap() = check("offline-map", R.string.offline_map_title) {
+        OfflineMapContent(OfflineMap.Ready(MapDetails(48_000_000, 1_789_000_000_000L, 1_790_000_000L)), onBack = {}, onGetAgain = {}, onDelete = {}, onTryAgain = {})
     }
 
     @Test

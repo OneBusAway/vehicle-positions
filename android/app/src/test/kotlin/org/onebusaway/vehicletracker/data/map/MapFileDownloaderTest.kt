@@ -219,7 +219,7 @@ class MapFileDownloaderTest {
 
         val result = fetch(downloader = downloader(freeSpace = file.size + SPACE_TO_SPARE - 1))
 
-        assertEquals(FetchResult.Failed(MapFailure.NO_SPACE, FileVersion(etag = "\"v1\"")), result)
+        assertEquals("with the size it needs", FetchResult.Failed(MapFailure.NO_SPACE, FileVersion(etag = "\"v1\""), file.size.toLong()), result)
         assertFalse(part.exists())
         assertTrue(versions.isEmpty())
     }

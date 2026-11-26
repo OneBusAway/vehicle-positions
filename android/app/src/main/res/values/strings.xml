@@ -190,6 +190,9 @@
     <!-- Under During a trip in Settings: when the display stays on. -->
     <string name="settings_screen_charging">Screen on while charging</string>
     <string name="settings_screen_always">Screen always on</string>
+    <!-- Under Offline map in Settings, in a few words: where the agency's street map stands on this phone, e.g. "Ready, 48 MB". -->
+    <string name="settings_map_ready">Ready, %1$s</string>
+    <string name="settings_map_needs_attention">Needs attention</string>
     <!-- Over the rows about the app itself, such as its language. -->
     <string name="settings_group_app">App</string>
     <!-- The row that names the app's theme, and the title over the list of themes a tap on it opens. -->
@@ -210,6 +213,50 @@
     <!-- Buttons on a row that is missing: Android asks about it, or turns location on for the phone. -->
     <string name="permission_check_allow">Allow</string>
     <string name="permission_check_turn_on">Turn on</string>
+    <!-- Offline map, opened from Settings: the agency's street map on this phone, which Tracking draws under the trip. The same words name its row in Settings. -->
+    <string name="offline_map_title">Offline map</string>
+    <!-- Under Ready, what the map gives the driver. -->
+    <string name="offline_map_ready_detail">Tracking has streets with no connection</string>
+    <!-- How much of the map has downloaded, as a percentage, e.g. "Downloading, 42%". Also at the end of its row in Settings. -->
+    <string name="offline_map_downloading">Downloading, %1$d%%</string>
+    <!-- How much of the map has downloaded, and how big it is, e.g. "20 MB of 48 MB". -->
+    <string name="offline_map_downloaded_of">%1$s of %2$s</string>
+    <!-- Under Not enough space: the map's size, e.g. "The map needs 48 MB". -->
+    <string name="offline_map_needs">The map needs %1$s</string>
+    <!-- Under Not downloaded yet. -->
+    <string name="offline_map_tries_by_itself">The app tries again by itself</string>
+    <string name="offline_map_tries_when_opened">The app tries again when it is next opened</string>
+    <!-- The map link from the agency gives something that is not a map, or is plain http, which the phone refuses. Over "Tell your agency". -->
+    <string name="offline_map_unusable">Map file is not usable</string>
+    <string name="offline_map_needs_https">Map link must use https</string>
+    <string name="offline_map_tell_agency">Tell your agency</string>
+    <!-- The driver deleted the map from this phone. Also at the end of its row in Settings. -->
+    <string name="offline_map_deleted">Not on this phone</string>
+    <string name="offline_map_deleted_detail">You deleted it</string>
+    <!-- The map's facts, each beside its value: its size, e.g. "48 MB", the day it was downloaded, and when the app last asked whether there is a newer one. -->
+    <string name="offline_map_size">Size</string>
+    <string name="offline_map_fetched">Fetched</string>
+    <string name="offline_map_last_checked">Last checked</string>
+    <!-- When the app last asked about the map, if that was today, e.g. "Today, 6:40 AM". -->
+    <string name="offline_map_today">Today, %1$s</string>
+    <!-- Buttons. Get it again downloads the map anew; Get the map brings back one the driver deleted. -->
+    <string name="offline_map_get_again">Get it again</string>
+    <string name="offline_map_delete">Delete from this phone</string>
+    <string name="offline_map_try_again">Try again</string>
+    <string name="offline_map_try_again_now">Try again now</string>
+    <string name="offline_map_get">Get the map</string>
+    <!-- One line at the bottom of the page, by the map's state. -->
+    <string name="offline_map_line_ready">The app checks for a newer map once a day.</string>
+    <string name="offline_map_line_downloading">It goes on if you leave this screen. If the connection goes, it starts again by itself.</string>
+    <string name="offline_map_line_no_space">Free some space on the phone, then try again. Trips work without the map.</string>
+    <string name="offline_map_line_not_downloaded">Trips work without the map.</string>
+    <string name="offline_map_line_unusable">Trips work without the map. The app checks again once a day.</string>
+    <string name="offline_map_line_deleted">It stays off this phone until you get it again. Trips work without it.</string>
+    <!-- Asked before the map is deleted. -->
+    <string name="offline_map_delete_title">Delete the map?</string>
+    <string name="offline_map_delete_message">Tracking then shows the route and its stops without streets, until you get the map again.</string>
+    <string name="offline_map_delete_cancel">Cancel</string>
+    <string name="offline_map_delete_confirm">Delete</string>
     <!-- During a trip, opened from Settings: a page of choices for the Tracking screen. The same words name its row in Settings. -->
     <string name="trip_settings_title">During a trip</string>
     <!-- Over two choices: when the phone's display stays on, each over what it means. -->

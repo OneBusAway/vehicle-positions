@@ -136,6 +136,8 @@ class TripPanelModelTest {
 
     @Test fun `the street map row says where the file stands, and is hidden with no map`() {
         assertNull(streetMap(MapFileState.None))
+        assertNull("the driver deleted it", streetMap(MapFileState.Deleted))
+        assertEquals("an update on its way", StreetMap.Ready, streetMap(MapFileState.Ready(File("map.pmtiles"), update = MapFileState.Downloading(1, 100))))
         assertEquals(StreetMap.Ready, streetMap(MapFileState.Ready(File("map.pmtiles"))))
         assertEquals(StreetMap.Downloading(42), streetMap(MapFileState.Downloading(bytes = 42, total = 100)))
         assertEquals(StreetMap.NotDownloaded, streetMap(MapFileState.Failed(MapFailure.NETWORK)))

@@ -59,8 +59,8 @@ sealed interface FetchResult {
     /** The whole file is at [FetchRequest.target], checked. */
     data class Complete(val version: FileVersion, val length: Long) : FetchResult
 
-    /** [version] is what the host sent, when it sent anything. */
-    data class Failed(val reason: MapFailure, val version: FileVersion? = null) : FetchResult
+    /** [version] is what the host sent, when it sent anything, and [size] the file's length, when it said. */
+    data class Failed(val reason: MapFailure, val version: FileVersion? = null, val size: Long? = null) : FetchResult
 }
 
 /** Fetches the agency's map file. An interface so [MapRepository] can be tested without a network. */
@@ -174,7 +174,7 @@ class MapFileDownloader(
             val directory = requireNotNull(request.part.absoluteFile.parentFile)
             directory.mkdirs()
             val needed = (if (total > 0) total - start else 0L) + SPACE_TO_SPARE
-            if (freeSpace(directory) < needed) return Attempt.Done(FetchResult.Failed(MapFailure.NO_SPACE, version))
+            if (freeSpace(directory) < needed) return Attempt.Done(FetchResult.Failed(MapFailure.NO_SPACE, version, total.takeIf { it > 0 }))
 
             // The first bytes say whether this is a map file at all, so a wrong URL costs a few
             // bytes rather than the whole download.

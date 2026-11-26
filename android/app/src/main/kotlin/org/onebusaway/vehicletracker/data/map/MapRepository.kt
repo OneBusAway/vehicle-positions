@@ -5,12 +5,14 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.onebusaway.vehicletracker.data.AppLog
 import org.onebusaway.vehicletracker.data.SessionStore
@@ -48,6 +50,9 @@ internal const val LAST_RETRY_MS = 5 * 60_000L
  * if it is). A newer version downloads under a new name and the state moves to it, so the next
  * map to open reads it while an open one keeps the old. Files nothing points to any more are
  * deleted when the app next starts, before any map opens.
+ *
+ * The driver can [delete] the map, and it stays off the phone for that server, whatever later
+ * refreshes find, until they [getAgain].
  */
 @Singleton
 class MapRepository @Inject constructor(
@@ -57,7 +62,7 @@ class MapRepository @Inject constructor(
     private val scope: CoroutineScope,
     private val sessionStore: SessionStore,
     @param:EpochSecondsClock private val now: () -> Long,
-) : MapFileSource {
+) : OfflineMapSource {
     private val _state = MutableStateFlow<MapFileState>(MapFileState.None)
     override val state: StateFlow<MapFileState> = _state.asStateFlow()
 
@@ -73,11 +78,51 @@ class MapRepository @Inject constructor(
      * Asks for the map, or checks the one here is current, unless a refresh for the same sign-in is already under
      * way. One waiting to retry asks at once instead. One for an earlier sign-in is stopped first.
      */
-    fun refresh() {
+    override fun refresh() = runNext(nudges = true) { signIn -> keepTrying(signIn) }
+
+    /**
+     * Takes the server's map off the phone, and keeps it off: every refresh leaves it until [getAgain]. What is under way
+     * stops first, so no download can bring it back. The file goes at once if no map is open, and otherwise when the app
+     * next starts.
+     */
+    override fun delete() = runNext { signIn ->
+        // Started, it is done: a refresh for the next sign-in waits for it.
+        withContext(NonCancellable) {
+            signIn?.let { orLogged("Deleting the map", otherwise = {}) { deleteFor(it.server) } }
+        }
+    }
+
+    /**
+     * Downloads the server's map again, as a new file, and switches to it as an update does. One the driver deleted comes
+     * back. Until it is here, a broken connection is tried again as for the first copy.
+     */
+    override fun getAgain() = runNext { signIn ->
+        signIn ?: return@runNext
+        val cleared = withContext(NonCancellable) {
+            orLogged("Reading the map record", otherwise = { false }) {
+                val record = store.load()
+                if (signIn.server in record.deleted) store.save(record.copy(deleted = record.deleted - signIn.server))
+                true
+            }
+        }
+        if (cleared) keepTrying(signIn, asked = true)
+    }
+
+    override suspend fun details(): MapDetails? = orLogged("Reading the map record", otherwise = { null }) {
+        val server = signIn()?.server
+        val map = store.load().current?.takeIf { server != null && (it.server == server || it.server == null) }
+        map?.let { store.stat(it.fileName) }?.let { (bytes, fetchedAtMs) -> MapDetails(bytes, fetchedAtMs, map.checkedAtEpochSec) }
+    }
+
+    /**
+     * Runs [work] for the driver signed in, once what is under way has stopped. With [nudges], one for the same sign-in
+     * already under way is left to go on, and one waiting to retry asks at once instead.
+     */
+    private fun runNext(nudges: Boolean = false, work: suspend (SignIn?) -> Unit) {
         scope.launch {
             val signIn = orLogged("Reading the session", otherwise = { null }) { signIn() }
             synchronized(lock) {
-                if (running?.isActive == true && runningFor == signIn) {
+                if (nudges && running?.isActive == true && runningFor == signIn) {
                     waiting?.complete(Unit)
                     return@launch
                 }
@@ -86,10 +131,20 @@ class MapRepository @Inject constructor(
                 running = scope.launch {
                     previous?.cancelAndJoin()
                     started.join()
-                    keepTrying(signIn)
+                    work(signIn)
                 }
             }
         }
+    }
+
+    private suspend fun deleteFor(server: String) {
+        val record = store.load()
+        // Another server's map is left for when it is signed in again.
+        val left = record.current?.takeIf { it.server != server && it.server != null }
+        val without = record.copy(current = left, pending = null, deleted = record.deleted + server)
+        store.save(without)
+        _state.value = MapFileState.Deleted
+        if (OpenMaps.none) store.deleteUnlisted(without)
     }
 
     /** Who the map is being asked for: the server, as [normalizedServerUrl] gives it, and the driver signed in. */
@@ -116,11 +171,12 @@ class MapRepository @Inject constructor(
 
     private enum class Outcome { DONE, RETRY }
 
-    private suspend fun keepTrying(signIn: SignIn?) {
+    /** [asked] is a download the driver asked for, of a map that may be here already. */
+    private suspend fun keepTrying(signIn: SignIn?, asked: Boolean = false) {
         // With nobody signed in there is no server to ask for a map.
         signIn ?: return
         var wait = FIRST_RETRY_MS
-        while (orLogged("The map check", otherwise = { failed(MapFailure.UNEXPECTED, retry = false) }) { check(signIn.server) } == Outcome.RETRY) {
+        while (orLogged("The map check", otherwise = { failed(MapFailure.UNEXPECTED, retry = false) }) { check(signIn.server, asked) } == Outcome.RETRY) {
             val nudged = waitToRetry(wait)
             // After a sign-out, or with another driver or server, this retry is no longer theirs: the next sign-in's own
             // refresh asks.
@@ -140,9 +196,16 @@ class MapRepository @Inject constructor(
         }
     }
 
-    /** Checks the map for [signedInTo], the server signed in. */
-    private suspend fun check(signedInTo: String): Outcome {
+    /**
+     * Checks the map for [signedInTo], the server signed in. [asked] downloads it again even when the one here is current,
+     * showing its progress, and tries again after a broken connection.
+     */
+    private suspend fun check(signedInTo: String, asked: Boolean): Outcome {
         val record = store.load()
+        if (signedInTo in record.deleted) {
+            _state.value = MapFileState.Deleted
+            return Outcome.DONE
+        }
         val kept = record.current
         // One from an older build, with no server, is most likely this server's, so it stays on screen while this
         // server is asked about it. One from another server shows that agency's streets, so it goes from the screen.
@@ -151,20 +214,47 @@ class MapRepository @Inject constructor(
         if (kept != null && current == null && _state.value is MapFileState.Ready) _state.value = MapFileState.None
         // Back from a server whose check left nothing in its place, this server's map goes on the screen again.
         if (current != null && _state.value !is MapFileState.Ready) _state.value = MapFileState.Ready(store.file(current.fileName))
-        if (current?.server == signedInTo && record.pending == null && isRecent(current.checkedAtEpochSec)) return Outcome.DONE
+        if (!asked && current?.server == signedInTo && record.pending == null && isRecent(current.checkedAtEpochSec)) return Outcome.DONE
 
+        val firstCopy = current == null
+        var shown: MapFileState? = null
+        /** Shows how far [bytes] of [total] have got, as the first copy or as an update of the map here. */
+        fun show(bytes: Long, total: Long) {
+            val progress = MapFileState.Downloading(bytes, total)
+            shown = (if (firstCopy) progress else MapFileState.Ready(store.file(current!!.fileName), progress)).also { _state.value = it }
+        }
+        // Asked for, it shows at once.
+        if (asked) show(0, -1)
+        try {
+            return fetchFor(signedInTo, asked, record, kept, current, firstCopy, ::show)
+        } finally {
+            // A check that ends saying nothing, as when it is signed out, or is stopped for the next sign-in or by the
+            // driver, maybe while downloading or saving what came, leaves no progress showing. Only its own is cleared.
+            if (shown != null && _state.value == shown) _state.value = if (firstCopy) MapFileState.None else MapFileState.Ready(store.file(current!!.fileName))
+        }
+    }
+
+    private suspend fun fetchFor(
+        signedInTo: String,
+        asked: Boolean,
+        record: MapRecord,
+        kept: StoredMap?,
+        current: StoredMap?,
+        firstCopy: Boolean,
+        show: (Long, Long) -> Unit,
+    ): Outcome {
         val url = when (val answer = server.ask(signedInTo)) {
             is MapServerAnswer.File -> answer.url
             MapServerAnswer.NoMap -> {
                 // This server's map goes. Another server's is kept for when that server is signed in again. The files
                 // stay until the next start: a map on screen may be reading one.
-                val left = MapRecord(current = kept?.takeIf { current == null })
+                val left = MapRecord(current = kept?.takeIf { current == null }, deleted = record.deleted)
                 if (record != left) store.save(left)
                 _state.value = MapFileState.None
                 return Outcome.DONE
             }
             MapServerAnswer.SignedOut -> return Outcome.DONE
-            MapServerAnswer.Unreachable -> return failed(MapFailure.NETWORK)
+            MapServerAnswer.Unreachable -> return failed(MapFailure.NETWORK, asked = asked)
             // The client catches up with the sign-in in a moment: asked again then, with nothing shown meanwhile.
             MapServerAnswer.OtherServer -> return Outcome.RETRY
         }
@@ -175,71 +265,68 @@ class MapRepository @Inject constructor(
         val pending = record.pending?.takeIf { it.url == url } ?: PendingDownload(url, store.newFileName())
         // A download from a URL the server no longer gives is not coming back.
         record.pending?.takeIf { it.url != url }?.let { store.partFile(it.fileName).delete() }
-        // The same URL is the same file whichever server gave it, so another server's copy is only checked.
-        val known = if (kept?.url == url) kept.version else rejected?.version
-        val firstCopy = current == null
+        // The same URL is the same file whichever server gave it, so another server's copy is only checked. Asked for
+        // again, it is downloaded whatever version it is.
+        val known = if (asked) null else if (kept?.url == url) kept.version else rejected?.version
         var shownPercent = -1
-        var shown: MapFileState.Downloading? = null
 
-        return try {
-            val result = fetcher.fetch(
-                FetchRequest(url, store.partFile(pending.fileName), store.file(pending.fileName), pending.version, known),
-                onVersion = { version -> store.save(store.load().copy(pending = pending.copy(version = version))) },
-                onProgress = { bytes, total ->
-                    // An update downloads quietly: the map already here is still good.
-                    val percent = downloadPercent(bytes, total)
-                    if (firstCopy && percent != shownPercent) {
-                        shownPercent = percent
-                        shown = MapFileState.Downloading(bytes, total).also { _state.value = it }
-                    }
-                },
-            )
-            when (result) {
-                FetchResult.Unchanged -> {
-                    val latest = store.load().copy(pending = null)
-                    if (kept?.url == url) {
-                        store.save(latest.copy(current = kept.copy(checkedAtEpochSec = now(), server = signedInTo)))
-                        _state.value = MapFileState.Ready(store.file(kept.fileName))
-                        Outcome.DONE
-                    } else {
-                        // The host still serves the file that was turned down.
-                        store.save(latest.copy(rejected = rejected?.copy(atEpochSec = now())))
-                        failed(MapFailure.INVALID_FILE, retry = false)
-                    }
+        val result = fetcher.fetch(
+            FetchRequest(url, store.partFile(pending.fileName), store.file(pending.fileName), pending.version, known),
+            onVersion = { version -> store.save(store.load().copy(pending = pending.copy(version = version))) },
+            onProgress = { bytes, total ->
+                // An update keeps the map here on screen, and only Settings shows how it is getting on.
+                val percent = downloadPercent(bytes, total)
+                if (percent != shownPercent) {
+                    shownPercent = percent
+                    show(bytes, total)
                 }
-                is FetchResult.Complete -> {
-                    store.save(MapRecord(current = StoredMap(url, pending.fileName, result.version, now(), signedInTo)))
-                    _state.value = MapFileState.Ready(store.file(pending.fileName))
-                    Log.i(TAG, "Map file ready, ${result.length} bytes")
+            },
+        )
+        return when (result) {
+            FetchResult.Unchanged -> {
+                val latest = store.load().copy(pending = null)
+                if (kept?.url == url) {
+                    store.save(latest.copy(current = kept.copy(checkedAtEpochSec = now(), server = signedInTo)))
+                    _state.value = MapFileState.Ready(store.file(kept.fileName))
                     Outcome.DONE
-                }
-                is FetchResult.Failed -> {
-                    AppLog.w(TAG, "Map file not downloaded: ${result.reason}")
-                    when (result.reason) {
-                        MapFailure.INVALID_FILE -> {
-                            store.save(store.load().copy(pending = null, rejected = RejectedMap(url, result.version ?: FileVersion(), now())))
-                            failed(MapFailure.INVALID_FILE, retry = false)
-                        }
-                        MapFailure.NO_SPACE, MapFailure.CLEARTEXT_BLOCKED, MapFailure.UNEXPECTED -> failed(result.reason, retry = false)
-                        MapFailure.NETWORK -> failed(MapFailure.NETWORK)
-                    }
+                } else {
+                    // The host still serves the file that was turned down.
+                    store.save(latest.copy(rejected = rejected?.copy(atEpochSec = now())))
+                    failed(MapFailure.INVALID_FILE, retry = false)
                 }
             }
-        } catch (e: CancellationException) {
-            // Stopped for the next sign-in, while downloading or saving what came, whose check may end without saying
-            // anything, as when it is signed out. Only this check's progress is cleared.
-            if (shown != null && _state.value == shown) _state.value = MapFileState.None
-            throw e
+            is FetchResult.Complete -> {
+                store.save(MapRecord(current = StoredMap(url, pending.fileName, result.version, now(), signedInTo), deleted = record.deleted))
+                _state.value = MapFileState.Ready(store.file(pending.fileName))
+                Log.i(TAG, "Map file ready, ${result.length} bytes")
+                Outcome.DONE
+            }
+            is FetchResult.Failed -> {
+                AppLog.w(TAG, "Map file not downloaded: ${result.reason}")
+                when (result.reason) {
+                    MapFailure.INVALID_FILE -> {
+                        store.save(store.load().copy(pending = null, rejected = RejectedMap(url, result.version ?: FileVersion(), now())))
+                        failed(MapFailure.INVALID_FILE, retry = false)
+                    }
+                    MapFailure.NO_SPACE, MapFailure.CLEARTEXT_BLOCKED, MapFailure.UNEXPECTED -> failed(result.reason, retry = false, size = result.size)
+                    MapFailure.NETWORK -> failed(MapFailure.NETWORK, asked = asked)
+                }
+            }
         }
     }
 
     /**
-     * Shows [reason] while the phone has no map. A phone that has one keeps showing it, and does
-     * not retry: the check is still due, so the next [refresh] tries again.
+     * Shows [reason] while the phone has no map, with the file's [size] when known. A phone that has one keeps showing
+     * it, and does not retry: the check is still due, so the next [refresh] tries again. Unless the driver [asked] for a
+     * new copy, which is tried for again as the first copy is.
      */
-    private fun failed(reason: MapFailure, retry: Boolean = true): Outcome {
-        if (_state.value is MapFileState.Ready) return Outcome.DONE
-        _state.value = MapFileState.Failed(reason)
+    private fun failed(reason: MapFailure, retry: Boolean = true, size: Long? = null, asked: Boolean = false): Outcome {
+        val ready = _state.value as? MapFileState.Ready
+        if (ready != null) {
+            _state.value = MapFileState.Ready(ready.file)
+            return if (retry && asked) Outcome.RETRY else Outcome.DONE
+        }
+        _state.value = MapFileState.Failed(reason, size)
         return if (retry) Outcome.RETRY else Outcome.DONE
     }
 
