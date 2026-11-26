@@ -50,6 +50,7 @@ import org.onebusaway.vehicletracker.data.map.MapFileSource
 import org.onebusaway.vehicletracker.data.map.MapFileStore
 import org.onebusaway.vehicletracker.data.map.MapRepository
 import org.onebusaway.vehicletracker.data.map.MapServer
+import org.onebusaway.vehicletracker.data.map.OfflineMapSource
 import org.onebusaway.vehicletracker.data.map.TrackerMapServer
 import org.onebusaway.vehicletracker.service.RestartTracking
 import org.onebusaway.vehicletracker.service.ResumeNotifier
@@ -296,6 +297,9 @@ object AppModule {
 
     @Provides
     fun provideMapFileSource(repository: MapRepository): MapFileSource = repository
+
+    @Provides
+    fun provideOfflineMapSource(repository: MapRepository): OfflineMapSource = repository
 
     @Provides
     @EpochSecondsClock

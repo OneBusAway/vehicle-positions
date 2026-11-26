@@ -294,19 +294,6 @@ class MapRepositoryTest {
         assertTrue(new.exists())
     }
 
-    @Test fun `an update downloads without the progress note`() = runTest {
-        setUp()
-        mapHere(checkedAt = clock - day)
-        fetcher.steps += fetcher.complete(v2, progress = listOf(10L to 100L, 90L to 100L))
-        val repository = started()
-        val states = statesOf(repository)
-
-        repository.refresh()
-        settle()
-
-        assertTrue("states were $states", states.all { it is MapFileState.Ready })
-    }
-
     @Test fun `a new URL from the server downloads a new map`() = runTest {
         setUp()
         mapHere(checkedAt = clock - day, from = "https://old.example.org/a.pmtiles")
@@ -840,6 +827,327 @@ class MapRepositoryTest {
         } finally {
             dir.setWritable(true)
         }
+    }
+
+    // --- Deleted by the driver, and got again ---
+
+    /** A map that is here and current, as when the driver opens Offline map. */
+    private suspend fun TestScope.readyRepository(): Pair<MapRepository, File> {
+        val map = mapHere()
+        val repository = started()
+        repository.refresh()
+        settle()
+        assertEquals(MapFileState.Ready(map), repository.state.value)
+        return repository to map
+    }
+
+    @Test fun `deleting takes the map off the phone at once when no map is open`() = runTest {
+        setUp()
+        val (repository, map) = readyRepository()
+
+        repository.delete()
+        settle()
+
+        assertEquals(MapFileState.Deleted, repository.state.value)
+        assertEquals(MapRecord(deleted = setOf(serverA)), store.load())
+        assertFalse(map.exists())
+    }
+
+    @Test fun `with a map open, its file stays until the next start`() = runTest {
+        setUp()
+        val (repository, map) = readyRepository()
+        OpenMaps.opened()
+        try {
+            repository.delete()
+            settle()
+        } finally {
+            OpenMaps.closed()
+        }
+
+        assertEquals(MapFileState.Deleted, repository.state.value)
+        assertTrue("a map may be reading it", map.exists())
+
+        started()
+
+        assertFalse(map.exists())
+    }
+
+    @Test fun `a deleted map stays deleted, and no refresh asks for it, not after a day nor a new start`() = runTest {
+        setUp()
+        val (repository, _) = readyRepository()
+        val asked = server.askedAt.size
+        repository.delete()
+        settle()
+
+        clock += 2 * day
+        repository.refresh()
+        settle()
+        val next = started()
+        assertEquals("nothing on the phone to show", MapFileState.None, next.state.value)
+        next.refresh()
+        settle()
+
+        assertEquals(MapFileState.Deleted, next.state.value)
+        assertEquals("nobody asked", asked, server.askedAt.size)
+        assertTrue(fetcher.requests.isEmpty())
+    }
+
+    @Test fun `deleting stops a download under way, which then can't bring the map back`() = runTest {
+        setUp()
+        val map = mapHere(checkedAt = clock - day)
+        fetcher.steps += FakeFetcher.Step { request, onVersion, onProgress ->
+            onVersion(v2)
+            request.part.writeText("partial")
+            onProgress(10, 100)
+            awaitCancellation()
+        }
+        val repository = started()
+        repository.refresh()
+        settle()
+        assertEquals(MapFileState.Ready(map, update = MapFileState.Downloading(10, 100)), repository.state.value)
+
+        repository.delete()
+        settle()
+        repository.refresh()
+        settle()
+
+        assertEquals(MapFileState.Deleted, repository.state.value)
+        assertEquals(MapRecord(deleted = setOf(serverA)), store.load())
+        assertEquals("the part file goes too", setOf("map.json"), dir.list()!!.toSet())
+    }
+
+    @Test fun `deleting is per server, so another server's map still comes, and this one stays deleted`() = runTest {
+        setUp()
+        val (repository, _) = readyRepository()
+        repository.delete()
+        settle()
+
+        sessions.state.value = signedIn.copy(serverUrl = "$serverB/")
+        fetcher.steps += fetcher.complete(v1)
+        repository.refresh()
+        settle()
+        assertTrue(repository.state.value is MapFileState.Ready)
+        assertEquals("the mark is kept through the next server's map", setOf(serverA), store.load().deleted)
+
+        sessions.state.value = signedIn
+        repository.refresh()
+        settle()
+        assertEquals(MapFileState.Deleted, repository.state.value)
+        assertEquals(serverB, store.load().current!!.server)
+    }
+
+    @Test fun `deleting this server's map leaves another server's`() = runTest {
+        setUp()
+        val other = mapHere(from = "https://b-maps.example.org/b.pmtiles", server = serverB)
+        val repository = started()
+
+        repository.delete()
+        settle()
+
+        assertEquals(serverB, store.load().current!!.server)
+        assertEquals(setOf(serverA), store.load().deleted)
+        assertTrue(other.exists())
+    }
+
+    @Test fun `no map from the server keeps the servers whose map was deleted`() = runTest {
+        setUp()
+        server.default = MapServerAnswer.NoMap
+        mapHere()
+        store.save(store.load().copy(deleted = setOf(serverB)))
+        val repository = started()
+
+        clock += day
+        repository.refresh()
+        settle()
+
+        assertEquals(MapRecord(deleted = setOf(serverB)), store.load())
+    }
+
+    @Test fun `getting a deleted map clears the mark and downloads it as a first copy`() = runTest {
+        setUp()
+        val (repository, _) = readyRepository()
+        repository.delete()
+        settle()
+        val states = statesOf(repository)
+        fetcher.steps += fetcher.complete(v1, progress = listOf(50L to 100L))
+
+        repository.getAgain()
+        settle()
+
+        val target = fetcher.requests.single().target
+        assertEquals(
+            listOf(MapFileState.Deleted, MapFileState.Downloading(0, -1), MapFileState.Downloading(50, 100), MapFileState.Ready(target)),
+            states,
+        )
+        assertEquals(StoredMap(url, target.name, v1, clock, serverA), store.load().current)
+        assertEquals(emptySet<String>(), store.load().deleted)
+    }
+
+    @Test fun `getting it again downloads a new copy under a new name, even when the one here is current`() = runTest {
+        setUp()
+        val (repository, map) = readyRepository()
+        val states = statesOf(repository)
+        fetcher.steps += fetcher.complete(v1, progress = listOf(40L to 100L))
+
+        repository.getAgain()
+        settle()
+
+        val request = fetcher.requests.single()
+        assertNull("whatever version it is", request.knownVersion)
+        assertNotEquals(map, request.target)
+        assertEquals(
+            "the map here stays on screen until the new one is here",
+            listOf(
+                MapFileState.Ready(map),
+                MapFileState.Ready(map, update = MapFileState.Downloading(0, -1)),
+                MapFileState.Ready(map, update = MapFileState.Downloading(40, 100)),
+                MapFileState.Ready(request.target),
+            ),
+            states,
+        )
+        assertTrue("an open map may be reading it", map.exists())
+    }
+
+    @Test fun `a new copy asked for is tried again after a broken connection, with the map here kept`() = runTest {
+        setUp()
+        val (repository, map) = readyRepository()
+        fetcher.steps += fetcher.fail(MapFailure.NETWORK)
+        fetcher.steps += fetcher.complete(v1)
+
+        repository.getAgain()
+        settle()
+        assertEquals("says it waits to try again", MapFileState.Ready(map, againFailed = MapFileState.Failed(MapFailure.NETWORK)), repository.state.value)
+
+        advanceTimeBy(FIRST_RETRY_MS)
+        settle()
+
+        assertEquals(2, fetcher.requests.size)
+        assertEquals(MapFileState.Ready(fetcher.requests.last().target), repository.state.value)
+    }
+
+    // A new copy downloads beside the map here, so it needs room for both.
+    @Test fun `a new copy asked for with no room for it says so beside the map here, with what it needs`() = runTest {
+        setUp()
+        val (repository, map) = readyRepository()
+        fetcher.steps += FakeFetcher.Step { _, _, _ -> FetchResult.Failed(MapFailure.NO_SPACE, v1, size = 48_000_000) }
+
+        repository.getAgain()
+        settle()
+
+        assertEquals(MapFileState.Ready(map, againFailed = MapFileState.Failed(MapFailure.NO_SPACE, 48_000_000)), repository.state.value)
+        assertEquals("not tried again on a timer", 1, fetcher.requests.size)
+    }
+
+    /** Asks for a new copy of the map here, which fails for [reason]. */
+    private suspend fun TestScope.getAgainFailing(reason: MapFailure): Pair<MapRepository, File> {
+        setUp()
+        val ready = readyRepository()
+        fetcher.steps += fetcher.fail(reason)
+        ready.first.getAgain()
+        settle()
+        return ready
+    }
+
+    @Test fun `a new copy asked for that is not a map says so beside the map here`() = runTest {
+        val (repository, map) = getAgainFailing(MapFailure.INVALID_FILE)
+        assertEquals(MapFileState.Ready(map, againFailed = MapFileState.Failed(MapFailure.INVALID_FILE)), repository.state.value)
+    }
+
+    @Test fun `a new copy asked for over plain http says so beside the map here`() = runTest {
+        val (repository, map) = getAgainFailing(MapFailure.CLEARTEXT_BLOCKED)
+        assertEquals(MapFileState.Ready(map, againFailed = MapFileState.Failed(MapFailure.CLEARTEXT_BLOCKED)), repository.state.value)
+    }
+
+    @Test fun `a new copy asked for that fails on the phone says so beside the map here`() = runTest {
+        val (repository, map) = getAgainFailing(MapFailure.UNEXPECTED)
+        assertEquals(MapFileState.Ready(map, againFailed = MapFileState.Failed(MapFailure.UNEXPECTED)), repository.state.value)
+    }
+
+    @Test fun `a check the app makes by itself stays quiet when it fails`() = runTest {
+        setUp()
+        val map = mapHere(checkedAt = clock - day)
+        fetcher.steps += FakeFetcher.Step { _, _, onProgress ->
+            onProgress(10, 100)
+            FetchResult.Failed(MapFailure.NO_SPACE, v2, size = 48_000_000)
+        }
+        val repository = started()
+
+        repository.refresh()
+        settle()
+
+        assertEquals(MapFileState.Ready(map), repository.state.value)
+    }
+
+    @Test fun `asking again clears what the last try said`() = runTest {
+        setUp()
+        val (repository, map) = readyRepository()
+        fetcher.steps += fetcher.fail(MapFailure.UNEXPECTED)
+        repository.getAgain()
+        settle()
+        fetcher.steps += fetcher.complete(v1)
+
+        repository.getAgain()
+        settle()
+
+        assertEquals(MapFileState.Ready(fetcher.requests.last().target), repository.state.value)
+        assertNotEquals(map, fetcher.requests.last().target)
+    }
+
+    @Test fun `a new copy asked for and answered signed out leaves no progress showing`() = runTest {
+        setUp()
+        val (repository, map) = readyRepository()
+        server.answers += MapServerAnswer.SignedOut
+
+        repository.getAgain()
+        settle()
+
+        assertEquals(MapFileState.Ready(map), repository.state.value)
+    }
+
+    @Test fun `an update keeps the map on screen and shows its progress beside it`() = runTest {
+        setUp()
+        val map = mapHere(checkedAt = clock - day)
+        fetcher.steps += fetcher.complete(v2, progress = listOf(10L to 100L, 90L to 100L))
+        val repository = started()
+        val states = statesOf(repository)
+
+        repository.refresh()
+        settle()
+
+        assertEquals(
+            listOf(
+                MapFileState.Ready(map),
+                MapFileState.Ready(map, update = MapFileState.Downloading(10, 100)),
+                MapFileState.Ready(map, update = MapFileState.Downloading(90, 100)),
+                MapFileState.Ready(fetcher.requests.single().target),
+            ),
+            states,
+        )
+    }
+
+    @Test fun `too little space says how much the map needs`() = runTest {
+        setUp()
+        fetcher.steps += FakeFetcher.Step { _, _, _ -> FetchResult.Failed(MapFailure.NO_SPACE, v1, size = 48_000_000) }
+        val repository = started()
+
+        repository.refresh()
+        settle()
+
+        assertEquals(MapFileState.Failed(MapFailure.NO_SPACE, size = 48_000_000), repository.state.value)
+    }
+
+    @Test fun `the details are this server's map's`() = runTest {
+        setUp()
+        val map = mapHere(checkedAt = clock - 60)
+        map.setLastModified(1_789_000_000_000L)
+        val repository = started()
+
+        assertEquals(MapDetails(3, 1_789_000_000_000L, clock - 60), repository.details())
+
+        sessions.state.value = signedIn.copy(serverUrl = "$serverB/")
+        assertNull("not another server's", repository.details())
+        sessions.state.value = signedIn.copy(token = null)
+        assertNull("nor with nobody signed in", repository.details())
     }
 
     private inner class FakeMapServer : MapServer {

@@ -73,9 +73,12 @@ internal sealed interface StreetMap {
     data object Unusable : StreetMap
 }
 
-/** Null hides the row: with no street map, the agency has none or the server has not been asked yet. */
+/**
+ * Null hides the row: with no street map, the agency has none, the server has not been asked yet, or the driver deleted
+ * it in Settings.
+ */
 internal fun streetMap(state: MapFileState): StreetMap? = when (state) {
-    MapFileState.None -> null
+    MapFileState.None, MapFileState.Deleted -> null
     is MapFileState.Downloading -> StreetMap.Downloading(downloadPercent(state.bytes, state.total))
     is MapFileState.Ready -> StreetMap.Ready
     is MapFileState.Failed -> when (state.reason) {

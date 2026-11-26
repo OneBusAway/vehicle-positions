@@ -96,6 +96,7 @@ import org.onebusaway.vehicletracker.R
 import org.onebusaway.vehicletracker.data.map.MapFailure
 import org.onebusaway.vehicletracker.data.MapUp
 import org.onebusaway.vehicletracker.data.map.MapFileState
+import org.onebusaway.vehicletracker.data.map.OpenMaps
 import org.onebusaway.vehicletracker.data.map.downloadPercent
 import org.onebusaway.vehicletracker.engine.Adherence
 import org.onebusaway.vehicletracker.engine.ShapeGeometry
@@ -267,7 +268,10 @@ private fun RecenterChip(onClick: () -> Unit) {
     }
 }
 
-/** A note over the map while it has no streets to show yet. Nothing once it has, or when the agency has no map. */
+/**
+ * A note over the map while it has no streets to show yet. Nothing once it has, when the agency has no map, or when the
+ * driver deleted it.
+ */
 @Composable
 private fun MapFileNote(state: MapFileState) {
     val icon: Int
@@ -281,7 +285,7 @@ private fun MapFileNote(state: MapFileState) {
             icon = if (state.reason == MapFailure.NO_SPACE) R.drawable.ic_sd_card_alert else R.drawable.ic_sync_problem
             text = stringResource(mapFailureNote(state.reason))
         }
-        MapFileState.None, is MapFileState.Ready -> return
+        MapFileState.None, is MapFileState.Ready, MapFileState.Deleted -> return
     }
     Surface(shape = NoteShape, color = MaterialTheme.colorScheme.surfaceContainerLow, shadowElevation = 1.dp) {
         Column(
@@ -387,6 +391,7 @@ private class RouteMapController(
     init {
         MapLibre.getInstance(context)
         mapView = MapView(context)
+        OpenMaps.opened()
         // No saved state: the camera follows the vehicle, so there is nothing of its own to restore.
         mapView.onCreate(null)
         context.registerComponentCallbacks(lowMemory)
@@ -542,6 +547,7 @@ private class RouteMapController(
         if (resumed) mapView.onPause()
         if (started) mapView.onStop()
         mapView.onDestroy()
+        OpenMaps.closed()
     }
 
     private fun render() {

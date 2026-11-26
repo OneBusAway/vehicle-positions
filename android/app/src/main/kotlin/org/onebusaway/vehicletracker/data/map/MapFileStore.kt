@@ -25,6 +25,8 @@ data class MapRecord(
     val pending: PendingDownload? = null,
     /** A version the host served that was not a usable map, so it is not fetched again. */
     val rejected: RejectedMap? = null,
+    /** The servers whose map the driver deleted from this phone: it stays off until they get it again. */
+    val deleted: Set<String> = emptySet(),
 )
 
 /**
@@ -90,6 +92,12 @@ class MapFileStore(
 
     fun file(name: String): File = File(directory, name)
 
+    /** How long the file [name] is and when it was last written, or null when it is not here. */
+    suspend fun stat(name: String): Pair<Long, Long>? = withContext(io) {
+        val file = file(name)
+        if (file.isFile) file.length() to file.lastModified() else null
+    }
+
     fun partFile(name: String): File = File(directory, name + PART_SUFFIX)
 
     /** A name no file in the directory has had. */
@@ -98,7 +106,8 @@ class MapFileStore(
     /**
      * Deletes every file [record] does not name: maps replaced by a newer one or dropped by the
      * agency, and downloads given up on. Only safe while no map has a file open, which is why the
-     * app does it at start, before any map opens, and never later.
+     * app does it at start, before any map opens, and after the driver deletes the map only when
+     * [OpenMaps] says none is open.
      */
     suspend fun deleteUnlisted(record: MapRecord) = withContext(io) {
         val keep = setOfNotNull(

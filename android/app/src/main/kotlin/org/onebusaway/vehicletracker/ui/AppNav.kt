@@ -63,6 +63,7 @@ import org.onebusaway.vehicletracker.ui.routes.RouteItem
 import org.onebusaway.vehicletracker.ui.routes.RoutesScreen
 import org.onebusaway.vehicletracker.ui.routes.routeColorHex
 import org.onebusaway.vehicletracker.ui.runs.RunsScreen
+import org.onebusaway.vehicletracker.ui.settings.OfflineMapScreen
 import org.onebusaway.vehicletracker.ui.settings.PermissionCheckScreen
 import org.onebusaway.vehicletracker.ui.settings.SettingsScreen
 import org.onebusaway.vehicletracker.ui.settings.TripSettingsScreen
@@ -98,11 +99,12 @@ private const val ROUTE_ROUTES = "trip/{vehicleId}"
 private const val ROUTE_RUNS = "trip/{vehicleId}/routes/{routeId}?name={routeName}&color={routeColor}&text={routeTextColor}"
 private const val ROUTE_TRACKING = "tracking"
 private const val ROUTE_RESUME = "resume"
-// Settings, from the account button on the steps of choosing a trip, Permission check, During a trip and Help from
-// Settings, and the welcome opened again from Help.
+// Settings, from the account button on the steps of choosing a trip, Permission check, During a trip, Offline map and
+// Help from Settings, and the welcome opened again from Help.
 internal const val ROUTE_SETTINGS = "settings"
 internal const val ROUTE_PERMISSION_CHECK = "permission_check"
 internal const val ROUTE_TRIP_SETTINGS = "trip_settings"
+internal const val ROUTE_OFFLINE_MAP = "offline_map"
 internal const val ROUTE_HELP = "help"
 internal const val ROUTE_WELCOME_AGAIN = "welcome_again"
 // Not private: RunsViewModel reads them out of its SavedStateHandle, and the names have to
@@ -154,11 +156,11 @@ private fun AnimatedContentTransitionScope<NavBackStackEntry>.onTowardsBuses(): 
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.toOrFromTracking(): Boolean =
     initialState.destination.route == ROUTE_TRACKING || targetState.destination.route == ROUTE_TRACKING
 
-private val SETTINGS_ROUTES = setOf(ROUTE_SETTINGS, ROUTE_PERMISSION_CHECK, ROUTE_TRIP_SETTINGS, ROUTE_HELP, ROUTE_WELCOME_AGAIN)
+private val SETTINGS_ROUTES = setOf(ROUTE_SETTINGS, ROUTE_PERMISSION_CHECK, ROUTE_TRIP_SETTINGS, ROUTE_OFFLINE_MAP, ROUTE_HELP, ROUTE_WELCOME_AGAIN)
 
 /**
  * Whether one step here opened the other: Settings is a step on from the step it opened over, Permission check, During a
- * trip and Help from Settings, and the welcome from Help. Not signing out, which leaves them all for Sign in.
+ * trip, Offline map and Help from Settings, and the welcome from Help. Not signing out, which leaves them all for Sign in.
  */
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.toOrFromSettings(): Boolean {
     val from = initialState.destination.route
@@ -492,6 +494,7 @@ fun AppNav(modifier: Modifier = Modifier, navViewModel: AppNavViewModel = hiltVi
                 onBack = dropUnlessResumed { navController.popBackStack() },
                 onPermissionCheck = dropUnlessResumed { navController.navigate(ROUTE_PERMISSION_CHECK) },
                 onTripSettings = dropUnlessResumed { navController.navigate(ROUTE_TRIP_SETTINGS) },
+                onOfflineMap = dropUnlessResumed { navController.navigate(ROUTE_OFFLINE_MAP) },
                 onHelp = dropUnlessResumed { navController.navigate(ROUTE_HELP) },
                 // Not a tap: it fires once the phone has forgotten the driver.
                 onSignedOut = { navController.navigate(ROUTE_LOGIN, toSignIn) },
@@ -505,6 +508,15 @@ fun AppNav(modifier: Modifier = Modifier, navViewModel: AppNavViewModel = hiltVi
         composable(ROUTE_TRIP_SETTINGS) {
             ClearOfSystemBars {
                 TripSettingsScreen(onBack = dropUnlessResumed { navController.popBackStack() })
+            }
+        }
+        composable(ROUTE_OFFLINE_MAP) { entry ->
+            ClearOfSystemBars {
+                OfflineMapScreen(
+                    onBack = dropUnlessResumed { navController.popBackStack() },
+                    // Only this page, and only while it is the one on top.
+                    onGone = { if (navController.currentBackStackEntry == entry) navController.popBackStack() },
+                )
             }
         }
         composable(ROUTE_HELP) {

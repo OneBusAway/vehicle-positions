@@ -1,5 +1,6 @@
 package org.onebusaway.vehicletracker.ui
 
+import android.text.format.Formatter
 import android.content.Intent
 import android.os.Build
 import android.view.KeyEvent
@@ -22,6 +23,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsNotSelected
@@ -38,6 +40,7 @@ import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.isSelectable
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -64,11 +67,13 @@ import org.onebusaway.vehicletracker.data.ReportsWaiting
 import org.onebusaway.vehicletracker.data.ScreenOn
 import org.onebusaway.vehicletracker.data.ThemeChoice
 import org.onebusaway.vehicletracker.data.WaitingOutlook
+import org.onebusaway.vehicletracker.data.map.MapDetails
 import org.onebusaway.vehicletracker.ui.account.AccountButton
 import org.onebusaway.vehicletracker.ui.account.AccountUiState
 import org.onebusaway.vehicletracker.ui.account.LocalOpenSettings
 import org.onebusaway.vehicletracker.ui.permissions.Fix
 import org.onebusaway.vehicletracker.ui.permissions.Grants
+import org.onebusaway.vehicletracker.ui.settings.OfflineMap
 import org.onebusaway.vehicletracker.ui.settings.PhoneAccess
 import org.onebusaway.vehicletracker.ui.settings.Readiness
 import org.onebusaway.vehicletracker.ui.settings.SettingsContent
@@ -100,6 +105,7 @@ class SettingsScreenTest {
         var fixes = 0
         var permissionCheck = 0
         var tripSettings = 0
+        var offlineMap = 0
         var signOuts = 0
         var signedOut = 0
         val themes = mutableListOf<ThemeChoice>()
@@ -116,6 +122,7 @@ class SettingsScreenTest {
         account: AccountUiState = this.account,
         theme: ThemeChoice = ThemeChoice.SYSTEM,
         screenOn: ScreenOn = ScreenOn.CHARGING,
+        offlineMap: OfflineMap? = null,
         dark: Boolean = false,
     ) {
         AppTheme(darkTheme = dark) {
@@ -126,10 +133,12 @@ class SettingsScreenTest {
                 version = "0.1.0 (1)",
                 theme = theme,
                 screenOn = screenOn,
+                offlineMap = offlineMap,
                 onBack = { calls.back++ },
                 onFix = { calls.fixes++ },
                 onPermissionCheck = { calls.permissionCheck++ },
                 onTripSettings = { calls.tripSettings++ },
+                onOfflineMap = { calls.offlineMap++ },
                 onSignOut = { calls.signOuts++ },
                 onSignedOut = { calls.signedOut++ },
                 onChooseTheme = { calls.themes += it },
@@ -536,6 +545,27 @@ class SettingsScreenTest {
         row(R.string.settings_screen_always).performScrollTo().performClick()
 
         assertEquals(2, calls.tripSettings)
+    }
+
+    @Test
+    fun theOfflineMapRowSaysWhereTheMapStands_andOpensIt_butIsNotThereWithNoMap() {
+        var map by mutableStateOf<OfflineMap?>(null)
+        compose.setContent { Content(offlineMap = map) }
+        fun row(detail: String) = compose.onNode(hasText(string(R.string.offline_map_title)) and hasText(detail) and hasClickAction())
+
+        compose.onAllNodesWithText(string(R.string.offline_map_title)).assertCountEquals(0)
+        map = OfflineMap.Ready(MapDetails(48_000_000, 1_789_000_000_000L, 1_790_000_000L))
+        row(string(R.string.settings_map_ready, Formatter.formatShortFileSize(context, 48_000_000))).performScrollTo().performClick()
+        map = OfflineMap.Downloading(20, 48)
+        row(context.getString(R.string.offline_map_downloading, 41)).performScrollTo()
+        map = OfflineMap.Deleted
+        row(string(R.string.offline_map_deleted)).performScrollTo()
+        for (attention in listOf(OfflineMap.NoSpace(null), OfflineMap.NotDownloaded(true), OfflineMap.Unusable(true))) {
+            map = attention
+            row(string(R.string.settings_map_needs_attention)).performScrollTo()
+        }
+
+        assertEquals(1, calls.offlineMap)
     }
 
     @Test

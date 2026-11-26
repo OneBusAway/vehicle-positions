@@ -11,10 +11,20 @@ sealed interface MapFileState {
     /** The first copy is on its way. An update to a map already here downloads without showing this. */
     data class Downloading(val bytes: Long, val total: Long) : MapFileState
 
-    data class Ready(val file: File) : MapFileState
+    /**
+     * [update] is a newer copy on its way, while maps keep [file]. [againFailed] is why the new copy the driver asked for
+     * did not come, while maps keep this one; a check the app makes by itself never sets it.
+     */
+    data class Ready(val file: File, val update: Downloading? = null, val againFailed: Failed? = null) : MapFileState
 
-    /** The first copy could not be fetched. When the app tries again depends on [reason]. */
-    data class Failed(val reason: MapFailure) : MapFileState
+    /**
+     * The first copy could not be fetched. When the app tries again depends on [reason]. [size] is the file's, in bytes,
+     * when its host said: with too little space, what the map needs.
+     */
+    data class Failed(val reason: MapFailure, val size: Long? = null) : MapFileState
+
+    /** The driver deleted it from this phone, and no refresh gets it again until they ask for it. */
+    data object Deleted : MapFileState
 }
 
 enum class MapFailure {
@@ -40,6 +50,21 @@ enum class MapFailure {
 /** The street map's state, as the tracking screen reads it. */
 interface MapFileSource {
     val state: StateFlow<MapFileState>
+}
+
+/** The map on the phone: how big its file is, when it was fetched, and when its host was last asked about it. */
+data class MapDetails(val bytes: Long, val fetchedAtMs: Long, val checkedAtEpochSec: Long)
+
+/** The street map as Settings shows it, and what the driver can do with it there. */
+interface OfflineMapSource : MapFileSource {
+    /** The map on the phone for the server signed in; null when there is none, as one from another server is not its. */
+    suspend fun details(): MapDetails?
+
+    fun refresh()
+
+    fun delete()
+
+    fun getAgain()
 }
 
 /** How far a download has got, in whole percent. It shows 100 only once the file is done. */

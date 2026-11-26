@@ -1279,6 +1279,12 @@ learn it is gone, the Tracking screen goes back to the plain background the next
 time it opens, and the file is deleted the next time the app starts. A Tracking
 screen that is open at the time keeps what it shows until then.
 
+In the app's Settings, **Offline map** shows where the file stands on that
+phone: its size, the day it was fetched and when the app last asked about it.
+A driver can get it again from there, or delete it to make room; a deleted map
+stays off that phone, through the daily checks, until the driver gets it
+again.
+
 Street names are drawn in Latin letters only: the English name where
 OpenStreetMap has one, or else the local name when it is written in Latin
 letters. A place named only in another script, such as Devanagari, has no label

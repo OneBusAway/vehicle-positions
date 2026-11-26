@@ -4,6 +4,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -19,6 +20,7 @@ class MapFileStoreTest {
         current = StoredMap("https://maps.example.org/a.pmtiles", "map-a.pmtiles", FileVersion(etag = "\"v1\""), 1_000),
         pending = PendingDownload("https://maps.example.org/a.pmtiles", "map-b.pmtiles", FileVersion(etag = "\"v2\"")),
         rejected = RejectedMap("https://maps.example.org/old.pmtiles", FileVersion(lastModified = "Mon, 05 Oct 2026 10:00:00 GMT"), 900),
+        deleted = setOf("https://a.example.org", "https://b.example.org"),
     )
 
     @Test fun `a saved record reads back unchanged`() = runTest {
@@ -27,6 +29,23 @@ class MapFileStoreTest {
         store.save(record)
 
         assertEquals(record, store.load())
+    }
+
+    // As this build reads a record saved before maps could be deleted.
+    @Test fun `a record from before deleting reads with nothing deleted`() = runTest {
+        val dir = tempFolder.newFolder()
+        File(dir, "map.json").writeText("""{"current":{"url":"https://maps.example.org/a.pmtiles","fileName":"map-a.pmtiles","version":{},"checkedAtEpochSec":1000}}""")
+
+        assertEquals(emptySet<String>(), MapFileStore(dir).load().deleted)
+    }
+
+    @Test fun `a file's length and when it was written, or nothing for one that is not here`() = runTest {
+        val dir = tempFolder.newFolder()
+        File(dir, "map-a.pmtiles").apply { writeText("map") }.setLastModified(1_790_000_000_000L)
+        val store = MapFileStore(dir)
+
+        assertEquals(3L to 1_790_000_000_000L, store.stat("map-a.pmtiles"))
+        assertNull(store.stat("map-gone.pmtiles"))
     }
 
     @Test fun `saving creates the directory`() = runTest {
