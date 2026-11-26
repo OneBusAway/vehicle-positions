@@ -40966,7 +40966,7 @@
         }
       }
     },
-    "Sent when there is a connection again. Any still here after a day are dropped." : {
+    "Sent when there is a connection again, while you're signed in. Any still here after a day are dropped." : {
       "comment" : "Privacy, under 'Reports with no connection'."
     },
     "Server" : {
