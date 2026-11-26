@@ -1,6 +1,7 @@
 package org.onebusaway.vehicletracker.ui
 
 import android.Manifest
+import android.os.Build
 import android.view.KeyEvent
 import androidx.activity.compose.LocalActivityResultRegistryOwner
 import androidx.activity.result.ActivityResultRegistry
@@ -24,6 +25,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -76,7 +78,7 @@ class LocationNoticeTest {
         var visible by mutableStateOf(true)
         compose.setContent {
             AppTheme(darkTheme = false) {
-                Surface { LocationNoticeHost(visible, "metro.example", onAgree = { agreed++ }, onNotNow = { left++; visible = false }) }
+                Surface { LocationNoticeHost(visible, "metro.example", onAgree = { agreed++ }, onNotNow = { left++; visible = false }) {} }
             }
         }
 
@@ -166,8 +168,10 @@ class LocationNoticeTest {
         }
     }
 
+    // Before Android 13 notifications are no permission, and there is nothing to ask.
     @Test
     fun notificationsNeedNoNotice() {
+        assumeTrue(Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
         permissionCheck()
         compose.runOnIdle { fixes.fix(PermissionRow.NOTIFICATIONS) }
 

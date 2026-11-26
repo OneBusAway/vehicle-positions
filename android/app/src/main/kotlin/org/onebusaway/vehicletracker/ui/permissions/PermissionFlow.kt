@@ -172,16 +172,20 @@ fun rememberPermissionFlow(onReady: () -> Unit, noticeAgreed: Boolean?): Permiss
     return rememberPermissionFlow(onReady, noticeAgreed, showsLocationRationale = { activity.showsLocationRationale() })
 }
 
-/** [showsLocationRationale] is Android's rationale for location, which a test cannot set by refusing a real prompt. */
+/**
+ * [showsLocationRationale] is Android's rationale for location, and [readGrants] what the phone has granted, which a
+ * test cannot set by answering a real prompt.
+ */
 @Composable
 internal fun rememberPermissionFlow(
     onReady: () -> Unit,
     noticeAgreed: Boolean?,
     showsLocationRationale: () -> Boolean,
+    readGrants: (Context) -> Grants = ::grantsOf,
 ): PermissionFlowController {
     val context = LocalContext.current
-    val controller = rememberSaveable(saver = permissionFlowSaver { grantsOf(context) }) {
-        PermissionFlowController { grantsOf(context) }
+    val controller = rememberSaveable(saver = permissionFlowSaver { readGrants(context) }) {
+        PermissionFlowController { readGrants(context) }
     }
     val latestOnReady by rememberUpdatedState(onReady)
 
@@ -228,8 +232,9 @@ internal fun rememberPermissionFlow(
         onPauseOrDispose {}
     }
 
-    // Again once the notice is agreed to, for the step that waited on it.
-    LaunchedEffect(controller.flow.step, noticeAgreed == true) {
+    // Again once the step stops waiting on the notice: agreed to, or precise location granted meanwhile in Android's
+    // settings, which needs no prompt.
+    LaunchedEffect(controller.flow.step, controller.waitsOnNotice(noticeAgreed)) {
         // Restored with Android still asking: its answer comes back to the launchers here, so it is not asked twice.
         if (controller.asking) return@LaunchedEffect
         if (controller.waitsOnNotice(noticeAgreed)) return@LaunchedEffect

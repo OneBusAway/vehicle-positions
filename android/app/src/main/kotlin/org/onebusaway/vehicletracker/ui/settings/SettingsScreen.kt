@@ -7,7 +7,6 @@ import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -118,7 +117,8 @@ fun SettingsScreen(
     val notice = rememberLocationNotice(noticeViewModel)
     val fixes = rememberPermissionFixes(onAnswer = access::refresh, notice = notice)
     val readiness = readiness(access.value, waiting)
-    Box {
+    // The header's Allow, before Android asks for location.
+    LocationNoticeHost(fixes.noticeFor != null, notice.server, onAgree = fixes::agreeToNotice, onNotNow = fixes::declineNotice) {
         SettingsContent(
             readiness = readiness,
             locationFix = fixOf(PermissionRow.LOCATION, fixes.onlyInSettings),
@@ -149,8 +149,6 @@ fun SettingsScreen(
                 }
             },
         )
-        // The header's Allow, before Android asks for location.
-        LocationNoticeHost(fixes.noticeFor != null, notice.server, onAgree = fixes::agreeToNotice, onNotNow = fixes::declineNotice)
     }
 }
 

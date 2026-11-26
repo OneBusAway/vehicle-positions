@@ -182,22 +182,23 @@ fun RunsScreen(
             )
         }
         AnimatedVisibility(visible = permissionFlow.visible, enter = fadeThroughIn(), exit = fadeThroughOut()) {
-            PreflightContent(
-                vehicleId = viewModel.vehicleId,
-                rows = permissionFlow.checklist,
-                canContinue = permissionFlow.canContinue,
-                onBack = permissionFlow::cancel,
-                onContinue = permissionFlow::onContinue,
-                onRowAction = permissionFlow::onRowAction,
-            )
+            // Over the checklist, before Android asks for location.
+            LocationNoticeHost(
+                visible = permissionFlow.showsNotice(notice.agreed),
+                server = notice.server,
+                onAgree = notice.agree,
+                onNotNow = permissionFlow::declineNotice,
+            ) {
+                PreflightContent(
+                    vehicleId = viewModel.vehicleId,
+                    rows = permissionFlow.checklist,
+                    canContinue = permissionFlow.canContinue,
+                    onBack = permissionFlow::cancel,
+                    onContinue = permissionFlow::onContinue,
+                    onRowAction = permissionFlow::onRowAction,
+                )
+            }
         }
-        // Over the checklist, before Android asks for location.
-        LocationNoticeHost(
-            visible = permissionFlow.showsNotice(notice.agreed),
-            server = notice.server,
-            onAgree = notice.agree,
-            onNotNow = permissionFlow::declineNotice,
-        )
         TipHost(
             tip = runTip,
             title = stringResource(R.string.tip_run_board_title),

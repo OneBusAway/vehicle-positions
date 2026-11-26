@@ -19,6 +19,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -29,7 +30,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -94,13 +97,26 @@ fun rememberLocationNotice(viewModel: LocationNoticeViewModel = hiltViewModel())
     return LocationNoticeState(agreed, server, viewModel::agree)
 }
 
-/** The notice over the screen while [visible], where Back is Not now. */
+/**
+ * [content] with the notice over it while [visible]. Only the notice can be tapped or read by TalkBack then, and Back
+ * is Not now, ahead of anything [content] does with Back.
+ */
 @Composable
-internal fun LocationNoticeHost(visible: Boolean, server: String?, onAgree: () -> Unit, onNotNow: () -> Unit) {
-    BackHandler(enabled = visible, onBack = onNotNow)
-    AnimatedVisibility(visible = visible, enter = fadeThroughIn(), exit = fadeThroughOut()) {
-        LocationNoticeContent(server, onAgree, onNotNow)
+internal fun LocationNoticeHost(
+    visible: Boolean,
+    server: String?,
+    onAgree: () -> Unit,
+    onNotNow: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    Box {
+        Box(if (visible) Modifier.clearAndSetSemantics {} else Modifier) { content() }
+        AnimatedVisibility(visible = visible, enter = fadeThroughIn(), exit = fadeThroughOut()) {
+            LocationNoticeContent(server, onAgree, onNotNow)
+        }
     }
+    // After the content's own, so it comes first.
+    BackHandler(enabled = visible, onBack = onNotNow)
 }
 
 /**
@@ -111,50 +127,53 @@ internal fun LocationNoticeHost(visible: Boolean, server: String?, onAgree: () -
 @Composable
 internal fun LocationNoticeContent(server: String?, onAgree: () -> Unit, onNotNow: () -> Unit) {
     val colors = MaterialTheme.colorScheme
-    // Over the checklist or a Settings page, it covers the whole window, and keeps clear of the bars itself.
-    Column(Modifier.fillMaxSize().background(colors.surface).safeDrawingPadding()) {
-        IconButton(onClick = onNotNow, modifier = Modifier.padding(start = 4.dp, top = 4.dp)) {
-            Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = stringResource(R.string.setup_navigate_up))
-        }
-        Column(
-            Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
-        ) {
-            Box(
-                Modifier.padding(top = 8.dp).size(64.dp).clip(CircleShape).background(colors.primaryContainer),
-                contentAlignment = Alignment.Center,
+    // Over the checklist or a Settings page it covers the whole window: a Surface, so a tap that misses its buttons
+    // stops here rather than reach the page under it. It keeps clear of the bars itself.
+    Surface(Modifier.fillMaxSize().semantics { isTraversalGroup = true }) {
+        Column(Modifier.fillMaxSize().safeDrawingPadding()) {
+            IconButton(onClick = onNotNow, modifier = Modifier.padding(start = 4.dp, top = 4.dp)) {
+                Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = stringResource(R.string.setup_navigate_up))
+            }
+            Column(
+                Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
             ) {
-                Icon(painterResource(R.drawable.ic_location_on), contentDescription = null, tint = colors.onPrimaryContainer, modifier = Modifier.size(32.dp))
+                Box(
+                    Modifier.padding(top = 8.dp).size(64.dp).clip(CircleShape).background(colors.primaryContainer),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(painterResource(R.drawable.ic_location_on), contentDescription = null, tint = colors.onPrimaryContainer, modifier = Modifier.size(32.dp))
+                }
+                Text(
+                    text = stringResource(R.string.location_notice_title),
+                    style = MaterialTheme.typography.headlineMedium,
+                    modifier = Modifier.padding(top = 24.dp).semantics { heading() },
+                )
+                Text(
+                    text = stringResource(R.string.location_notice_text, stringResource(R.string.app_name)),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = colors.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 16.dp, bottom = 24.dp),
+                )
+                SettingsRow(R.drawable.ic_schedule, stringResource(R.string.location_notice_when), stringResource(R.string.location_notice_when_detail), GroupPlace.FIRST)
+                SettingsRow(R.drawable.ic_near_me, stringResource(R.string.location_notice_what), stringResource(R.string.location_notice_what_detail), GroupPlace.MIDDLE)
+                SettingsRow(
+                    R.drawable.ic_dns,
+                    server?.let { stringResource(R.string.location_notice_to, it) } ?: stringResource(R.string.location_notice_to_agency),
+                    stringResource(R.string.location_notice_to_detail),
+                    GroupPlace.LAST,
+                )
             }
-            Text(
-                text = stringResource(R.string.location_notice_title),
-                style = MaterialTheme.typography.headlineMedium,
-                modifier = Modifier.padding(top = 24.dp).semantics { heading() },
-            )
-            Text(
-                text = stringResource(R.string.location_notice_text, stringResource(R.string.app_name)),
-                style = MaterialTheme.typography.bodyLarge,
-                color = colors.onSurfaceVariant,
-                modifier = Modifier.padding(top = 16.dp, bottom = 24.dp),
-            )
-            SettingsRow(R.drawable.ic_schedule, stringResource(R.string.location_notice_when), stringResource(R.string.location_notice_when_detail), GroupPlace.FIRST)
-            SettingsRow(R.drawable.ic_near_me, stringResource(R.string.location_notice_what), stringResource(R.string.location_notice_what_detail), GroupPlace.MIDDLE)
-            SettingsRow(
-                R.drawable.ic_dns,
-                server?.let { stringResource(R.string.location_notice_to, it) } ?: stringResource(R.string.location_notice_to_agency),
-                stringResource(R.string.location_notice_to_detail),
-                GroupPlace.LAST,
-            )
-        }
-        Column(
-            Modifier.fillMaxWidth().padding(start = 24.dp, top = 12.dp, end = 24.dp, bottom = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Button(onClick = onAgree, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
-                Text(stringResource(R.string.location_notice_agree))
-            }
-            TextButton(onClick = onNotNow, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
-                Text(stringResource(R.string.location_notice_not_now))
+            Column(
+                Modifier.fillMaxWidth().padding(start = 24.dp, top = 12.dp, end = 24.dp, bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Button(onClick = onAgree, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
+                    Text(stringResource(R.string.location_notice_agree))
+                }
+                TextButton(onClick = onNotNow, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                    Text(stringResource(R.string.location_notice_not_now))
+                }
             }
         }
     }

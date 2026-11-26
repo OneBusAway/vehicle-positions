@@ -93,10 +93,9 @@ fun PermissionCheckScreen(onBack: () -> Unit) {
     val access = rememberPhoneAccess()
     val notice = rememberLocationNotice()
     val fixes = rememberPermissionFixes(onAnswer = access::refresh, notice = notice)
-    Box {
+    // A location row's Allow, before Android asks.
+    LocationNoticeHost(fixes.noticeFor != null, notice.server, onAgree = fixes::agreeToNotice, onNotNow = fixes::declineNotice) {
         PermissionCheckContent(readiness(access.value, waiting = null), fixes, onBack)
-        // A location row's Allow, before Android asks.
-        LocationNoticeHost(fixes.noticeFor != null, notice.server, onAgree = fixes::agreeToNotice, onNotNow = fixes::declineNotice)
     }
 }
 
