@@ -359,8 +359,9 @@ OTHER_REFRESH=$(curl -s -X POST "$BASE/api/v1/auth/login" \
    report** with it off ("Precise location is off for this app."). Then come
    `driver@example.com` and `localhost` beside **Sign out**. At the end is
    **Version** with the app's version. Tap the top of the page, or **Permission
-   check**: each thing the app needs is there in order, with **Allowed** or, on
-   the one that stops a trip, a button that fixes it, and no trip starts. With
+   check**: each thing the app needs is there in order, and no trip starts.
+   Each one allowed says **Allowed**, the one that stops a trip has a button
+   that fixes it, and those after it, not reached yet, show neither. With
    Location Services off, the button there and at the top of **Settings** is
    **Try again**, as on **Before you start**. Go back. Under **During a trip**
    choose **Always on** and **North up**, and leave them for Check 1, which
