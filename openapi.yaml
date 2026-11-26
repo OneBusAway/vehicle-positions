@@ -56,8 +56,9 @@ tags:
   - name: gtfs
     description: Read-only access to the loaded GTFS schedule.
   - name: map
-    description: |
-      Where the driver app gets its offline street map, and the agency's links.
+    description: Where the driver app gets its offline street map.
+  - name: agency
+    description: What the driver app shows about the agency.
   - name: rider
     description: |
       Crowd-sourced positioning from rider devices. These five routes are
@@ -454,7 +455,7 @@ paths:
 
   /api/v1/agency:
     get:
-      tags: [map]
+      tags: [agency]
       summary: What the driver app says about the agency
       description: |
         Requires a driver or admin bearer token. `privacy_policy_url` is the
@@ -2587,8 +2588,12 @@ components:
       description: |
         The database can't answer for now, such as while it restarts. Whether
         anything was saved is not known; send it again later, as a report is
-        stored once. Only the routes reports come in by are answered so: any
-        other is a `500`, and the schedule's `503` means there is no schedule.
+        stored once. Only the routes reports come in by answer a database that
+        can't be reached so: the other routes answer it with a `500`, and
+        `GET /ready` with its own `503`. A `503` from the schedule's routes, from
+        starting a rider's ride, from a trip's rider status or from
+        `GET /api/v1/admin/reports/service` means something else: no schedule
+        is loaded.
       content:
         application/json:
           schema:
