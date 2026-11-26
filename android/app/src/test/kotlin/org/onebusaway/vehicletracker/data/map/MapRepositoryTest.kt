@@ -1,6 +1,7 @@
 package org.onebusaway.vehicletracker.data.map
 
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
@@ -23,6 +24,7 @@ import org.junit.rules.TemporaryFolder
 import org.onebusaway.vehicletracker.data.FakeSessionStore
 import org.onebusaway.vehicletracker.data.Session
 import java.io.File
+import kotlin.coroutines.CoroutineContext
 
 /**
  * [MapRepository]'s decisions, on virtual time, with the server and the file's host faked and the
@@ -634,7 +636,7 @@ class MapRepositoryTest {
 
     // A refresh stopped while it waits for the last one to stop no longer waits for it, so the one after can start
     // while the first is still stopping.
-    @Test fun `a check still stopping leaves the next check's progress showing`() = runTest {
+    @Test fun `the next check waits for the last one to stop, even past a refresh stopped while it waited`() = runTest {
         setUp()
         fetcher.steps += FakeFetcher.Step { _, _, onProgress ->
             onProgress(10, 100)
@@ -658,10 +660,52 @@ class MapRepositoryTest {
         sessions.state.value = signedIn.copy(email = "e@example.com")
         repository.refresh()
         runCurrent()
-        assertEquals(MapFileState.Downloading(20, 100), repository.state.value)
+        assertEquals("not while the first still stops", 1, fetcher.requests.size)
         settle()
 
+        assertEquals(2, fetcher.requests.size)
         assertEquals(MapFileState.Downloading(20, 100), repository.state.value)
+    }
+
+    @Test fun `a check after a delete still saving waits for it, even past a refresh stopped while it waited`() = runTest {
+        setUp()
+        val io = HeldDispatcher(StandardTestDispatcher(testScheduler))
+        store = MapFileStore(dir, io)
+        mapHere(checkedAt = clock - day)
+        val repository = started()
+
+        io.holding = true
+        repository.delete()
+        runCurrent()
+        sessions.state.value = signedIn.copy(serverUrl = "$serverB/")
+        repository.refresh()
+        runCurrent()
+        sessions.state.value = signedIn
+        repository.refresh()
+        runCurrent()
+        io.release()
+        settle()
+
+        assertEquals(MapFileState.Deleted, repository.state.value)
+        assertTrue("nothing fetched", fetcher.requests.isEmpty())
+        assertEquals(MapRecord(deleted = setOf(serverA)), store.load())
+    }
+
+    @Test fun `a download that comes keeps the deleted marks as they are then, not as its check began`() = runTest {
+        setUp()
+        fetcher.steps += FakeFetcher.Step { request, onVersion, _ ->
+            onVersion(v1)
+            store.save(store.load().copy(deleted = setOf(serverB)))
+            request.target.writeText("map")
+            FetchResult.Complete(v1, 3)
+        }
+        val repository = started()
+
+        repository.refresh()
+        settle()
+
+        assertTrue(repository.state.value is MapFileState.Ready)
+        assertEquals(setOf(serverB), store.load().deleted)
     }
 
     @Test fun `with a map here, a failed check waits for the next refresh`() = runTest {
@@ -829,6 +873,54 @@ class MapRepositoryTest {
         }
     }
 
+    /** Puts a directory where `map.json` is, which fails to read as a file. [restore] puts the record back. */
+    private fun unreadableRecord(): () -> Unit {
+        val record = File(dir, "map.json")
+        val aside = File(dir.parentFile, "map-aside.json")
+        assertTrue(record.renameTo(aside))
+        assertTrue(record.mkdir())
+        return {
+            assertTrue(record.delete())
+            assertTrue(aside.renameTo(record))
+        }
+    }
+
+    @Test fun `a record that can't be read at start deletes no file`() = runTest {
+        setUp()
+        val map = mapHere()
+        val restore = unreadableRecord()
+
+        val repository = started()
+
+        assertEquals(MapFileState.None, repository.state.value)
+        assertTrue(map.exists())
+        restore()
+        assertEquals(map.name, store.load().current?.fileName)
+    }
+
+    @Test fun `a record that can't be read gets nothing, and once it can, a deleted map is still deleted`() = runTest {
+        setUp()
+        val (repository, _) = readyRepository()
+        repository.delete()
+        settle()
+        val restore = unreadableRecord()
+
+        clock += day
+        repository.refresh()
+        settle()
+
+        assertEquals(MapFileState.Failed(MapFailure.UNEXPECTED), repository.state.value)
+        assertTrue("nothing fetched", fetcher.requests.isEmpty())
+
+        restore()
+        repository.refresh()
+        settle()
+
+        assertEquals(MapFileState.Deleted, repository.state.value)
+        assertEquals(setOf(serverA), store.load().deleted)
+        assertTrue(fetcher.requests.isEmpty())
+    }
+
     // --- Deleted by the driver, and got again ---
 
     /** A map that is here and current, as when the driver opens Offline map. */
@@ -850,6 +942,27 @@ class MapRepositoryTest {
 
         assertEquals(MapFileState.Deleted, repository.state.value)
         assertEquals(MapRecord(deleted = setOf(serverA)), store.load())
+        assertFalse(map.exists())
+    }
+
+    @Test fun `a delete that can't be saved leaves the map, says so, and can be tried again`() = runTest {
+        setUp()
+        val (repository, map) = readyRepository()
+        val before = store.load()
+        val blocker = File(dir, "map.json.tmp").apply { mkdir() }
+
+        repository.delete()
+        settle()
+
+        assertEquals(MapFileState.Ready(map, deleteFailed = true), repository.state.value)
+        assertTrue(map.exists())
+        assertEquals(before, store.load())
+
+        blocker.delete()
+        repository.delete()
+        settle()
+
+        assertEquals(MapFileState.Deleted, repository.state.value)
         assertFalse(map.exists())
     }
 
@@ -1025,6 +1138,41 @@ class MapRepositoryTest {
         assertEquals(MapFileState.Ready(fetcher.requests.last().target), repository.state.value)
     }
 
+    @Test fun `signed out while a new copy waits to be tried again, the page stops saying it tries, also once back`() = runTest {
+        setUp()
+        val (repository, map) = readyRepository()
+        fetcher.steps += fetcher.fail(MapFailure.NETWORK)
+        repository.getAgain()
+        settle()
+        assertEquals(MapFileState.Ready(map, againFailed = MapFileState.Failed(MapFailure.NETWORK)), repository.state.value)
+
+        sessions.state.value = signedIn.copy(token = null)
+        advanceTimeBy(FIRST_RETRY_MS)
+        runCurrent()
+        assertEquals(MapFileState.Ready(map), repository.state.value)
+
+        sessions.state.value = signedIn
+        repository.refresh()
+        settle()
+        assertEquals("checked within the day, so nobody is asked", MapFileState.Ready(map), repository.state.value)
+        assertEquals(1, fetcher.requests.size)
+    }
+
+    @Test fun `another driver signing in while a new copy waits to be tried again stops the page saying it tries`() = runTest {
+        setUp()
+        val (repository, map) = readyRepository()
+        fetcher.steps += fetcher.fail(MapFailure.NETWORK)
+        repository.getAgain()
+        settle()
+
+        sessions.state.value = signedIn.copy(email = "e@example.com")
+        repository.refresh()
+        settle()
+
+        assertEquals(MapFileState.Ready(map), repository.state.value)
+        assertEquals(1, fetcher.requests.size)
+    }
+
     // A new copy downloads beside the map here, so it needs room for both.
     @Test fun `a new copy asked for with no room for it says so beside the map here, with what it needs`() = runTest {
         setUp()
@@ -1035,6 +1183,8 @@ class MapRepositoryTest {
         settle()
 
         assertEquals(MapFileState.Ready(map, againFailed = MapFileState.Failed(MapFailure.NO_SPACE, 48_000_000)), repository.state.value)
+        advanceTimeBy(FIRST_RETRY_MS)
+        runCurrent()
         assertEquals("not tried again on a timer", 1, fetcher.requests.size)
     }
 
@@ -1061,6 +1211,25 @@ class MapRepositoryTest {
     @Test fun `a new copy asked for that fails on the phone says so beside the map here`() = runTest {
         val (repository, map) = getAgainFailing(MapFailure.UNEXPECTED)
         assertEquals(MapFileState.Ready(map, againFailed = MapFileState.Failed(MapFailure.UNEXPECTED)), repository.state.value)
+    }
+
+    @Test fun `asked for again, a file turned down today is fetched and checked again`() = runTest {
+        setUp()
+        val map = mapHere(checkedAt = clock - day)
+        fetcher.steps += fetcher.fail(MapFailure.INVALID_FILE, version = v2)
+        val repository = started()
+        repository.refresh()
+        settle()
+        assertEquals(MapFileState.Ready(map), repository.state.value)
+        assertEquals(RejectedMap(url, v2, clock), store.load().rejected)
+        fetcher.steps += fetcher.complete(v2)
+
+        repository.getAgain()
+        settle()
+
+        assertEquals("the agency may have put it right", 2, fetcher.requests.size)
+        assertNull(fetcher.requests.last().knownVersion)
+        assertEquals(MapFileState.Ready(fetcher.requests.last().target), repository.state.value)
     }
 
     @Test fun `a check the app makes by itself stays quiet when it fails`() = runTest {
@@ -1148,6 +1317,21 @@ class MapRepositoryTest {
         assertNull("not another server's", repository.details())
         sessions.state.value = signedIn.copy(token = null)
         assertNull("nor with nobody signed in", repository.details())
+    }
+
+    /** Hands on what it is given only while not [holding], so a test can catch the store half way through. */
+    private class HeldDispatcher(private val next: CoroutineDispatcher) : CoroutineDispatcher() {
+        var holding = false
+        private val held = ArrayDeque<Pair<CoroutineContext, Runnable>>()
+
+        override fun dispatch(context: CoroutineContext, block: Runnable) {
+            if (holding) held += context to block else next.dispatch(context, block)
+        }
+
+        fun release() {
+            holding = false
+            while (held.isNotEmpty()) held.removeFirst().let { (context, block) -> next.dispatch(context, block) }
+        }
     }
 
     private inner class FakeMapServer : MapServer {

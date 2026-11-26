@@ -49,10 +49,11 @@ internal const val LAST_RETRY_MS = 5 * 60_000L
  * A file a map may have open is never changed or deleted (maplibre-native #3658: MapLibre crashes
  * if it is). A newer version downloads under a new name and the state moves to it, so the next
  * map to open reads it while an open one keeps the old. Files nothing points to any more are
- * deleted when the app next starts, before any map opens.
+ * deleted when the app next starts, before any map opens, and when the driver deletes the map
+ * while no map is open.
  *
  * The driver can [delete] the map, and it stays off the phone for that server, whatever later
- * refreshes find, until they [getAgain].
+ * refreshes find, until they [getAgain]. A delete that can't be saved leaves the map, and says so.
  */
 @Singleton
 class MapRepository @Inject constructor(
@@ -83,12 +84,12 @@ class MapRepository @Inject constructor(
     /**
      * Takes the server's map off the phone, and keeps it off: every refresh leaves it until [getAgain]. What is under way
      * stops first, so no download can bring it back. The file goes at once if no map is open, and otherwise when the app
-     * next starts.
+     * next starts. One that can't be saved leaves the map here, saying so, for the driver to try again.
      */
     override fun delete() = runNext { signIn ->
         // Started, it is done: a refresh for the next sign-in waits for it.
         withContext(NonCancellable) {
-            signIn?.let { orLogged("Deleting the map", otherwise = {}) { deleteFor(it.server) } }
+            signIn?.let { orLogged("Deleting the map", otherwise = { deleteFailed() }) { deleteFor(it.server) } }
         }
     }
 
@@ -129,7 +130,8 @@ class MapRepository @Inject constructor(
                 val previous = running
                 runningFor = signIn
                 running = scope.launch {
-                    previous?.cancelAndJoin()
+                    // Even stopped itself, it waits, so what comes after it never runs beside a delete still saving.
+                    withContext(NonCancellable) { previous?.cancelAndJoin() }
                     started.join()
                     work(signIn)
                 }
@@ -145,6 +147,11 @@ class MapRepository @Inject constructor(
         store.save(without)
         _state.value = MapFileState.Deleted
         if (OpenMaps.none) store.deleteUnlisted(without)
+    }
+
+    private fun deleteFailed() {
+        val ready = _state.value as? MapFileState.Ready ?: return
+        _state.value = MapFileState.Ready(ready.file, deleteFailed = true)
     }
 
     /** Who the map is being asked for: the server, as [normalizedServerUrl] gives it, and the driver signed in. */
@@ -177,12 +184,24 @@ class MapRepository @Inject constructor(
         signIn ?: return
         var wait = FIRST_RETRY_MS
         while (orLogged("The map check", otherwise = { failed(MapFailure.UNEXPECTED, retry = false, asked = asked) }) { check(signIn.server, asked) } == Outcome.RETRY) {
-            val nudged = waitToRetry(wait)
+            val nudged = try {
+                waitToRetry(wait)
+            } catch (e: CancellationException) {
+                // Stopped, as by a refresh for another driver: nothing tries again for this copy now.
+                dropAgainFailed()
+                throw e
+            }
             // After a sign-out, or with another driver or server, this retry is no longer theirs: the next sign-in's own
             // refresh asks.
-            if (orLogged("Reading the session", otherwise = { null }) { signIn() } != signIn) return
+            if (orLogged("Reading the session", otherwise = { null }) { signIn() } != signIn) return dropAgainFailed()
             wait = if (nudged) FIRST_RETRY_MS else (wait * 2).coerceAtMost(LAST_RETRY_MS)
         }
+    }
+
+    /** Takes back why a new copy the driver asked for did not come, once nothing tries for it again by itself. */
+    private fun dropAgainFailed() {
+        val ready = _state.value as? MapFileState.Ready ?: return
+        if (ready.againFailed != null) _state.value = ready.copy(againFailed = null)
     }
 
     /** Waits [wait] ms, or less if a [refresh] for the same sign-in comes meanwhile. True if one did. */
@@ -260,7 +279,8 @@ class MapRepository @Inject constructor(
         }
 
         val rejected = record.rejected?.takeIf { it.url == url }
-        if (rejected != null && isRecent(rejected.atEpochSec)) return failed(MapFailure.INVALID_FILE, retry = false, asked = asked)
+        // Asked for, it is fetched and checked again: the agency may have put it right.
+        if (!asked && rejected != null && isRecent(rejected.atEpochSec)) return failed(MapFailure.INVALID_FILE, retry = false)
 
         val pending = record.pending?.takeIf { it.url == url } ?: PendingDownload(url, store.newFileName())
         // A download from a URL the server no longer gives is not coming back.
@@ -296,7 +316,8 @@ class MapRepository @Inject constructor(
                 }
             }
             is FetchResult.Complete -> {
-                store.save(MapRecord(current = StoredMap(url, pending.fileName, result.version, now(), signedInTo), deleted = record.deleted))
+                // The servers whose map was deleted as they are now, not as when the check began.
+                store.save(MapRecord(current = StoredMap(url, pending.fileName, result.version, now(), signedInTo), deleted = store.load().deleted))
                 _state.value = MapFileState.Ready(store.file(pending.fileName))
                 Log.i(TAG, "Map file ready, ${result.length} bytes")
                 Outcome.DONE

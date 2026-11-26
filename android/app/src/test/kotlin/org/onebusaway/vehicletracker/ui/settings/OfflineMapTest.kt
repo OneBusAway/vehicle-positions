@@ -40,6 +40,10 @@ class OfflineMapTest {
         assertEquals(OfflineMap.Ready(details, failed), offlineMap(MapFileState.Ready(file, againFailed = failed), details))
     }
 
+    @Test fun `a delete that did not happen is shown beside the map here`() {
+        assertEquals(OfflineMap.Ready(details, deleteFailed = true), offlineMap(MapFileState.Ready(file, deleteFailed = true), details))
+    }
+
     @Test fun `a map here that is not this server's is not shown as its`() {
         assertNull(offlineMap(MapFileState.Ready(file), details = null))
     }

@@ -164,6 +164,22 @@ class OfflineMapScreenTest {
         assertEquals(listOf("getAgain"), asked)
     }
 
+    @Test
+    fun aDeleteThatDidNotHappenSaysSoUnderReady_andDeleteIsStillThere() {
+        compose.setContent { Content() }
+
+        map = OfflineMap.Ready(ready.details, deleteFailed = true)
+        compose.onNodeWithText(string(R.string.tracking_street_map_ready)).assertIsDisplayed()
+        compose.onNodeWithText(string(R.string.offline_map_delete_failed)).assertIsDisplayed()
+        compose.onNodeWithText(string(R.string.offline_map_delete_failed_detail)).assertIsDisplayed()
+        button(R.string.offline_map_delete).performScrollTo().performClick()
+        button(R.string.offline_map_delete_confirm).performClick()
+        assertEquals(listOf("delete"), asked)
+
+        map = ready
+        compose.onAllNodesWithText(string(R.string.offline_map_delete_failed)).assertCountEquals(0)
+    }
+
     // Not a tap: dropUnlessResumed would drop it while the page comes in, and leave it blank.
     @Test
     fun withNoMapLeft_thePageGoesOnce_andShowsItsBarMeanwhile() {

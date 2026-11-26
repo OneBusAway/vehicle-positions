@@ -209,7 +209,12 @@ private fun StateCard(map: OfflineMap) {
                     detail?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant) }
                 }
             }
-            if (map is OfflineMap.Ready && map.againFailed != null) AgainFailed(map.againFailed, size)
+            if (map is OfflineMap.Ready) {
+                map.againFailed?.let { AgainFailed(it, size) }
+                if (map.deleteFailed) {
+                    Problem(stringResource(R.string.offline_map_delete_failed), stringResource(R.string.offline_map_delete_failed_detail))
+                }
+            }
             if (map is OfflineMap.Downloading) {
                 LinearProgressIndicator(
                     progress = { map.percent / 100f },
@@ -233,6 +238,12 @@ private fun AgainFailed(failure: MapFileState.Failed, size: (Long) -> String) {
         MapFailure.CLEARTEXT_BLOCKED -> stringResource(R.string.offline_map_again_needs_https)
         MapFailure.UNEXPECTED -> stringResource(R.string.offline_map_again_unexpected)
     }
+    Problem(stringResource(R.string.offline_map_again_failed), detail)
+}
+
+/** Under Ready: something the driver asked for that did not happen, with [title] over why. */
+@Composable
+private fun Problem(title: String, detail: String) {
     Row(
         Modifier.semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -240,7 +251,7 @@ private fun AgainFailed(failure: MapFileState.Failed, size: (Long) -> String) {
     ) {
         Icon(painterResource(R.drawable.ic_error), contentDescription = null, tint = AppTheme.problemColors.iconOnSurface, modifier = Modifier.size(24.dp))
         Column {
-            Text(stringResource(R.string.offline_map_again_failed), style = MaterialTheme.typography.titleSmall)
+            Text(title, style = MaterialTheme.typography.titleSmall)
             Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
