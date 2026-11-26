@@ -76,8 +76,12 @@ struct SettingsView: View {
             ToolbarItem(placement: .principal) {
                 SettingsBarTitle(readiness: shown ?? readiness, isFolded: isFolded)
                     .contentShape(.rect)
-                    // The folded bar is the header.
+                    // The folded bar is the header, for VoiceOver as well.
                     .onTapGesture { if isFolded { openPermissionCheck() } }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityAddTraits(isFolded ? .isButton : [])
+                    .accessibilityHint(isFolded ? PermissionCheckText.title : "")
+                    .accessibilityAction(.default) { if isFolded { openPermissionCheck() } }
             }
         }
         // A driver back from the Settings app, or from iOS's own prompt, may
