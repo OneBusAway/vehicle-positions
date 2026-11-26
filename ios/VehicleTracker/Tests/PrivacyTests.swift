@@ -12,7 +12,7 @@ import Testing
             == ["What is sent", "Who gets it", "What stays on this phone", "More"])
         #expect(PrivacyText.tripDetail == "Positions from Start trip until End trip. Nothing from before or after.")
         #expect(PrivacyText.positionDetail == "Position, how accurate it is, speed, direction and time, with the vehicle and the run.")
-        #expect(PrivacyText.keptDetail == "Sent when there is a connection again. Any still here after a day are dropped.")
+        #expect(PrivacyText.keptDetail == "Sent when there is a connection again, while you're signed in. Any still here after a day are dropped.")
         #expect(PrivacyText.appleMapsDetail == "Apple draws the map on Tracking. Reports never go to Apple.")
         #expect(PrivacyText.noOtherLibraries == "The app uses no other libraries or fonts.")
     }
