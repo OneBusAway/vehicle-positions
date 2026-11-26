@@ -510,9 +510,13 @@ fun AppNav(modifier: Modifier = Modifier, navViewModel: AppNavViewModel = hiltVi
                 TripSettingsScreen(onBack = dropUnlessResumed { navController.popBackStack() })
             }
         }
-        composable(ROUTE_OFFLINE_MAP) {
+        composable(ROUTE_OFFLINE_MAP) { entry ->
             ClearOfSystemBars {
-                OfflineMapScreen(onBack = dropUnlessResumed { navController.popBackStack() })
+                OfflineMapScreen(
+                    onBack = dropUnlessResumed { navController.popBackStack() },
+                    // Only this page, and only while it is the one on top.
+                    onGone = { if (navController.currentBackStackEntry == entry) navController.popBackStack() },
+                )
             }
         }
         composable(ROUTE_HELP) {

@@ -106,7 +106,8 @@ class MapFileStore(
     /**
      * Deletes every file [record] does not name: maps replaced by a newer one or dropped by the
      * agency, and downloads given up on. Only safe while no map has a file open, which is why the
-     * app does it at start, before any map opens, and never later.
+     * app does it at start, before any map opens, and after the driver deletes the map only when
+     * [OpenMaps] says none is open.
      */
     suspend fun deleteUnlisted(record: MapRecord) = withContext(io) {
         val keep = setOfNotNull(

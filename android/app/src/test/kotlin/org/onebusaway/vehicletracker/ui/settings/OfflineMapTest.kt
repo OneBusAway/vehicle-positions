@@ -35,6 +35,11 @@ class OfflineMapTest {
         assertEquals(OfflineMap.Downloading(10, 100), offlineMap(MapFileState.Ready(file, update = MapFileState.Downloading(10, 100)), details))
     }
 
+    @Test fun `a new copy that did not come is shown beside the map here`() {
+        val failed = MapFileState.Failed(MapFailure.NO_SPACE, 48_000_000)
+        assertEquals(OfflineMap.Ready(details, failed), offlineMap(MapFileState.Ready(file, againFailed = failed), details))
+    }
+
     @Test fun `a map here that is not this server's is not shown as its`() {
         assertNull(offlineMap(MapFileState.Ready(file), details = null))
     }

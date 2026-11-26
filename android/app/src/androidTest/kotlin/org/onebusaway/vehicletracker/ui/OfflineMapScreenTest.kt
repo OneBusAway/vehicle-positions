@@ -35,9 +35,15 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.onebusaway.vehicletracker.R
+import kotlinx.coroutines.flow.MutableStateFlow
 import org.onebusaway.vehicletracker.data.map.MapDetails
+import org.onebusaway.vehicletracker.data.map.MapFailure
+import org.onebusaway.vehicletracker.data.map.MapFileState
+import org.onebusaway.vehicletracker.data.map.OfflineMapSource
 import org.onebusaway.vehicletracker.ui.settings.OfflineMap
 import org.onebusaway.vehicletracker.ui.settings.OfflineMapContent
+import org.onebusaway.vehicletracker.ui.settings.OfflineMapScreen
+import org.onebusaway.vehicletracker.ui.settings.OfflineMapViewModel
 import org.onebusaway.vehicletracker.ui.theme.AppTheme
 
 /** Offline map: where the map stands in each state, and what each button does. */
@@ -138,6 +144,48 @@ class OfflineMapScreenTest {
 
         assertEquals(listOf("tryAgain", "tryAgain", "getAgain"), asked)
         compose.onAllNodesWithText(string(R.string.offline_map_last_checked)).assertCountEquals(0)
+    }
+
+    @Test
+    fun aNewCopyThatDidNotComeSaysWhyUnderReady_andGetItAgainIsStillThere() {
+        compose.setContent { Content() }
+
+        map = OfflineMap.Ready(ready.details, MapFileState.Failed(MapFailure.NO_SPACE, 48_000_000))
+        compose.onNodeWithText(string(R.string.tracking_street_map_ready)).assertIsDisplayed()
+        compose.onNodeWithText(string(R.string.offline_map_again_failed)).assertIsDisplayed()
+        compose.onNodeWithText(string(R.string.offline_map_again_no_space, size(48_000_000))).assertIsDisplayed()
+
+        map = OfflineMap.Ready(ready.details, MapFileState.Failed(MapFailure.NETWORK))
+        compose.onNodeWithText(string(R.string.offline_map_again_no_connection)).assertIsDisplayed()
+        button(R.string.offline_map_get_again).performScrollTo().performClick()
+
+        map = ready
+        compose.onAllNodesWithText(string(R.string.offline_map_again_failed)).assertCountEquals(0)
+        assertEquals(listOf("getAgain"), asked)
+    }
+
+    // Not a tap: dropUnlessResumed would drop it while the page comes in, and leave it blank.
+    @Test
+    fun withNoMapLeft_thePageGoesOnce_andShowsItsBarMeanwhile() {
+        val source = object : OfflineMapSource {
+            override val state = MutableStateFlow<MapFileState>(MapFileState.Ready(java.io.File("map-a.pmtiles")))
+            override suspend fun details() = ready.details
+            override fun refresh() = Unit
+            override fun delete() = Unit
+            override fun getAgain() = Unit
+        }
+        var gone = 0
+        val viewModel = OfflineMapViewModel(source)
+        compose.setContent {
+            AppTheme(darkTheme = false) { Surface { OfflineMapScreen(onBack = {}, onGone = { gone++ }, viewModel = viewModel) } }
+        }
+        compose.onNodeWithText(string(R.string.offline_map_ready_detail)).assertIsDisplayed()
+
+        source.state.value = MapFileState.None
+        compose.waitUntil(5_000) { gone == 1 }
+        compose.onNode(hasText(string(R.string.offline_map_title)) and isHeading()).assertIsDisplayed()
+        compose.waitForIdle()
+        assertEquals(1, gone)
     }
 
     @Test

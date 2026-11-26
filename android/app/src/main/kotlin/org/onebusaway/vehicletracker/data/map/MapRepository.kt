@@ -176,7 +176,7 @@ class MapRepository @Inject constructor(
         // With nobody signed in there is no server to ask for a map.
         signIn ?: return
         var wait = FIRST_RETRY_MS
-        while (orLogged("The map check", otherwise = { failed(MapFailure.UNEXPECTED, retry = false) }) { check(signIn.server, asked) } == Outcome.RETRY) {
+        while (orLogged("The map check", otherwise = { failed(MapFailure.UNEXPECTED, retry = false, asked = asked) }) { check(signIn.server, asked) } == Outcome.RETRY) {
             val nudged = waitToRetry(wait)
             // After a sign-out, or with another driver or server, this retry is no longer theirs: the next sign-in's own
             // refresh asks.
@@ -260,7 +260,7 @@ class MapRepository @Inject constructor(
         }
 
         val rejected = record.rejected?.takeIf { it.url == url }
-        if (rejected != null && isRecent(rejected.atEpochSec)) return failed(MapFailure.INVALID_FILE, retry = false)
+        if (rejected != null && isRecent(rejected.atEpochSec)) return failed(MapFailure.INVALID_FILE, retry = false, asked = asked)
 
         val pending = record.pending?.takeIf { it.url == url } ?: PendingDownload(url, store.newFileName())
         // A download from a URL the server no longer gives is not coming back.
@@ -292,7 +292,7 @@ class MapRepository @Inject constructor(
                 } else {
                     // The host still serves the file that was turned down.
                     store.save(latest.copy(rejected = rejected?.copy(atEpochSec = now())))
-                    failed(MapFailure.INVALID_FILE, retry = false)
+                    failed(MapFailure.INVALID_FILE, retry = false, asked = asked)
                 }
             }
             is FetchResult.Complete -> {
@@ -306,9 +306,9 @@ class MapRepository @Inject constructor(
                 when (result.reason) {
                     MapFailure.INVALID_FILE -> {
                         store.save(store.load().copy(pending = null, rejected = RejectedMap(url, result.version ?: FileVersion(), now())))
-                        failed(MapFailure.INVALID_FILE, retry = false)
+                        failed(MapFailure.INVALID_FILE, retry = false, asked = asked)
                     }
-                    MapFailure.NO_SPACE, MapFailure.CLEARTEXT_BLOCKED, MapFailure.UNEXPECTED -> failed(result.reason, retry = false, size = result.size)
+                    MapFailure.NO_SPACE, MapFailure.CLEARTEXT_BLOCKED, MapFailure.UNEXPECTED -> failed(result.reason, retry = false, size = result.size, asked = asked)
                     MapFailure.NETWORK -> failed(MapFailure.NETWORK, asked = asked)
                 }
             }
@@ -317,13 +317,14 @@ class MapRepository @Inject constructor(
 
     /**
      * Shows [reason] while the phone has no map, with the file's [size] when known. A phone that has one keeps showing
-     * it, and does not retry: the check is still due, so the next [refresh] tries again. Unless the driver [asked] for a
-     * new copy, which is tried for again as the first copy is.
+     * it, and does not retry: the check is still due, so the next [refresh] tries again. A check the app makes by itself
+     * says nothing more. A new copy the driver [asked] for says why it did not come, beside the map here, and is tried
+     * for again after a broken connection as the first copy is.
      */
     private fun failed(reason: MapFailure, retry: Boolean = true, size: Long? = null, asked: Boolean = false): Outcome {
         val ready = _state.value as? MapFileState.Ready
         if (ready != null) {
-            _state.value = MapFileState.Ready(ready.file)
+            _state.value = if (asked) MapFileState.Ready(ready.file, againFailed = MapFileState.Failed(reason, size)) else ready.copy(update = null)
             return if (retry && asked) Outcome.RETRY else Outcome.DONE
         }
         _state.value = MapFileState.Failed(reason, size)

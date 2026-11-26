@@ -12,7 +12,8 @@ import java.util.Locale
 
 /** The agency's street map as Settings shows it. */
 internal sealed interface OfflineMap {
-    data class Ready(val details: MapDetails) : OfflineMap
+    /** [againFailed] is why the new copy the driver asked for did not come. */
+    data class Ready(val details: MapDetails, val againFailed: MapFileState.Failed? = null) : OfflineMap
 
     /** The first copy, or a new one the map here waits for. [total] is -1 until the host says. */
     data class Downloading(val bytes: Long, val total: Long) : OfflineMap {
@@ -42,7 +43,7 @@ internal fun offlineMap(state: MapFileState, details: MapDetails?): OfflineMap? 
     MapFileState.None -> null
     MapFileState.Deleted -> OfflineMap.Deleted
     is MapFileState.Downloading -> OfflineMap.Downloading(state.bytes, state.total)
-    is MapFileState.Ready -> state.update?.let { OfflineMap.Downloading(it.bytes, it.total) } ?: details?.let(OfflineMap::Ready)
+    is MapFileState.Ready -> state.update?.let { OfflineMap.Downloading(it.bytes, it.total) } ?: details?.let { OfflineMap.Ready(it, state.againFailed) }
     is MapFileState.Failed -> when (state.reason) {
         MapFailure.NO_SPACE -> OfflineMap.NoSpace(state.size)
         MapFailure.NETWORK -> OfflineMap.NotDownloaded(byItself = true)

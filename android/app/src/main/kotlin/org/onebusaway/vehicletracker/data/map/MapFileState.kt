@@ -11,8 +11,11 @@ sealed interface MapFileState {
     /** The first copy is on its way. An update to a map already here downloads without showing this. */
     data class Downloading(val bytes: Long, val total: Long) : MapFileState
 
-    /** [update] is a newer copy on its way, while maps keep [file]. */
-    data class Ready(val file: File, val update: Downloading? = null) : MapFileState
+    /**
+     * [update] is a newer copy on its way, while maps keep [file]. [againFailed] is why the new copy the driver asked for
+     * did not come, while maps keep this one; a check the app makes by itself never sets it.
+     */
+    data class Ready(val file: File, val update: Downloading? = null, val againFailed: Failed? = null) : MapFileState
 
     /**
      * The first copy could not be fetched. When the app tries again depends on [reason]. [size] is the file's, in bytes,

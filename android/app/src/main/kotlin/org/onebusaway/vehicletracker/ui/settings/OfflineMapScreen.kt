@@ -64,6 +64,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.onebusaway.vehicletracker.R
 import org.onebusaway.vehicletracker.data.map.MapDetails
+import org.onebusaway.vehicletracker.data.map.MapFailure
+import org.onebusaway.vehicletracker.data.map.MapFileState
 import org.onebusaway.vehicletracker.ui.components.GroupOuterCorner
 import org.onebusaway.vehicletracker.ui.components.GroupPlace
 import org.onebusaway.vehicletracker.ui.components.InkButton
@@ -81,22 +83,20 @@ private val PictureHeight = 110.dp
 private const val FADED = 0.45f
 
 /**
- * The agency's street map on this phone: where it stands, and getting it again or deleting it. Leaves once there is none
- * to show, as when the agency drops it.
+ * The agency's street map on this phone: where it stands, and getting it again or deleting it. [onGone] leaves once
+ * there is none to show, as when the agency drops it; it is not a tap, so it is not dropped while the page comes in.
  */
 @Composable
-fun OfflineMapScreen(onBack: () -> Unit, viewModel: OfflineMapViewModel = hiltViewModel()) {
+fun OfflineMapScreen(onBack: () -> Unit, onGone: () -> Unit, viewModel: OfflineMapViewModel = hiltViewModel()) {
     val view by viewModel.map.collectAsStateWithLifecycle()
-    // Read in a moment, from the phone.
-    val read = view as? OfflineMapView.Read ?: return
-    LaunchedEffect(read.map) { if (read.map == null) onBack() }
-    val map = read.map ?: return
-    OfflineMapContent(map, onBack, viewModel::onGetAgain, viewModel::onDelete, viewModel::onTryAgain)
+    LaunchedEffect(view) { if (view == OfflineMapView.Read(null)) onGone() }
+    // Its bar shows while the map is read, in a moment, and as the page leaves.
+    OfflineMapContent((view as? OfflineMapView.Read)?.map, onBack, viewModel::onGetAgain, viewModel::onDelete, viewModel::onTryAgain)
 }
 
 @Composable
 internal fun OfflineMapContent(
-    map: OfflineMap,
+    map: OfflineMap?,
     onBack: () -> Unit,
     onGetAgain: () -> Unit,
     onDelete: () -> Unit,
@@ -116,6 +116,7 @@ internal fun OfflineMapContent(
             },
             scrollBehavior = scrollBehavior,
         )
+        if (map == null) return@Column
         Column(
             Modifier.verticalScroll(rememberScrollState()).padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -208,6 +209,7 @@ private fun StateCard(map: OfflineMap) {
                     detail?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant) }
                 }
             }
+            if (map is OfflineMap.Ready && map.againFailed != null) AgainFailed(map.againFailed, size)
             if (map is OfflineMap.Downloading) {
                 LinearProgressIndicator(
                     progress = { map.percent / 100f },
@@ -216,6 +218,30 @@ private fun StateCard(map: OfflineMap) {
                     trackColor = colors.surfaceContainerHighest,
                 )
             }
+        }
+    }
+}
+
+/** Why the new copy the driver asked for did not come. The map here stays, and Get it again tries again. */
+@Composable
+private fun AgainFailed(failure: MapFileState.Failed, size: (Long) -> String) {
+    val detail = when (failure.reason) {
+        MapFailure.NO_SPACE ->
+            failure.size?.let { stringResource(R.string.offline_map_again_no_space, size(it)) } ?: stringResource(R.string.offline_map_again_no_space_unknown)
+        MapFailure.NETWORK -> stringResource(R.string.offline_map_again_no_connection)
+        MapFailure.INVALID_FILE -> stringResource(R.string.offline_map_again_unusable)
+        MapFailure.CLEARTEXT_BLOCKED -> stringResource(R.string.offline_map_again_needs_https)
+        MapFailure.UNEXPECTED -> stringResource(R.string.offline_map_again_unexpected)
+    }
+    Row(
+        Modifier.semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(painterResource(R.drawable.ic_error), contentDescription = null, tint = AppTheme.problemColors.iconOnSurface, modifier = Modifier.size(24.dp))
+        Column {
+            Text(stringResource(R.string.offline_map_again_failed), style = MaterialTheme.typography.titleSmall)
+            Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

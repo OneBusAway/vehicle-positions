@@ -233,6 +233,15 @@
     <!-- The driver deleted the map from this phone. Also at the end of its row in Settings. -->
     <string name="offline_map_deleted">Not on this phone</string>
     <string name="offline_map_deleted_detail">You deleted it</string>
+    <!-- Under Ready, when the new copy the driver asked for with Get it again did not come: the map already here stays. The first is a heading over one of the others, which say why. -->
+    <string name="offline_map_again_failed">Couldn\'t get it again</string>
+    <!-- The map's size, e.g. "Not enough space: it needs 48 MB. Free some space, then try again." -->
+    <string name="offline_map_again_no_space">Not enough space: it needs %1$s. Free some space, then try again.</string>
+    <string name="offline_map_again_no_space_unknown">Not enough space. Free some space, then try again.</string>
+    <string name="offline_map_again_no_connection">No connection. The app tries again by itself.</string>
+    <string name="offline_map_again_unusable">The new file is not usable. Tell your agency.</string>
+    <string name="offline_map_again_needs_https">The map link must use https. Tell your agency.</string>
+    <string name="offline_map_again_unexpected">Something went wrong on the phone. Try again.</string>
     <!-- The map's facts, each beside its value: its size, e.g. "48 MB", the day it was downloaded, and when the app last asked whether there is a newer one. -->
     <string name="offline_map_size">Size</string>
     <string name="offline_map_fetched">Fetched</string>

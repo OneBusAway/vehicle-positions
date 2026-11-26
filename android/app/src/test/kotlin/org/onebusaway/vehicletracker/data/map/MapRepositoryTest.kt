@@ -1016,13 +1016,81 @@ class MapRepositoryTest {
 
         repository.getAgain()
         settle()
-        assertEquals(MapFileState.Ready(map), repository.state.value)
+        assertEquals("says it waits to try again", MapFileState.Ready(map, againFailed = MapFileState.Failed(MapFailure.NETWORK)), repository.state.value)
 
         advanceTimeBy(FIRST_RETRY_MS)
         settle()
 
         assertEquals(2, fetcher.requests.size)
         assertEquals(MapFileState.Ready(fetcher.requests.last().target), repository.state.value)
+    }
+
+    // A new copy downloads beside the map here, so it needs room for both.
+    @Test fun `a new copy asked for with no room for it says so beside the map here, with what it needs`() = runTest {
+        setUp()
+        val (repository, map) = readyRepository()
+        fetcher.steps += FakeFetcher.Step { _, _, _ -> FetchResult.Failed(MapFailure.NO_SPACE, v1, size = 48_000_000) }
+
+        repository.getAgain()
+        settle()
+
+        assertEquals(MapFileState.Ready(map, againFailed = MapFileState.Failed(MapFailure.NO_SPACE, 48_000_000)), repository.state.value)
+        assertEquals("not tried again on a timer", 1, fetcher.requests.size)
+    }
+
+    /** Asks for a new copy of the map here, which fails for [reason]. */
+    private suspend fun TestScope.getAgainFailing(reason: MapFailure): Pair<MapRepository, File> {
+        setUp()
+        val ready = readyRepository()
+        fetcher.steps += fetcher.fail(reason)
+        ready.first.getAgain()
+        settle()
+        return ready
+    }
+
+    @Test fun `a new copy asked for that is not a map says so beside the map here`() = runTest {
+        val (repository, map) = getAgainFailing(MapFailure.INVALID_FILE)
+        assertEquals(MapFileState.Ready(map, againFailed = MapFileState.Failed(MapFailure.INVALID_FILE)), repository.state.value)
+    }
+
+    @Test fun `a new copy asked for over plain http says so beside the map here`() = runTest {
+        val (repository, map) = getAgainFailing(MapFailure.CLEARTEXT_BLOCKED)
+        assertEquals(MapFileState.Ready(map, againFailed = MapFileState.Failed(MapFailure.CLEARTEXT_BLOCKED)), repository.state.value)
+    }
+
+    @Test fun `a new copy asked for that fails on the phone says so beside the map here`() = runTest {
+        val (repository, map) = getAgainFailing(MapFailure.UNEXPECTED)
+        assertEquals(MapFileState.Ready(map, againFailed = MapFileState.Failed(MapFailure.UNEXPECTED)), repository.state.value)
+    }
+
+    @Test fun `a check the app makes by itself stays quiet when it fails`() = runTest {
+        setUp()
+        val map = mapHere(checkedAt = clock - day)
+        fetcher.steps += FakeFetcher.Step { _, _, onProgress ->
+            onProgress(10, 100)
+            FetchResult.Failed(MapFailure.NO_SPACE, v2, size = 48_000_000)
+        }
+        val repository = started()
+
+        repository.refresh()
+        settle()
+
+        assertEquals(MapFileState.Ready(map), repository.state.value)
+    }
+
+    @Test fun `asking again clears what the last try said`() = runTest {
+        setUp()
+        val (repository, map) = readyRepository()
+        fetcher.steps += fetcher.fail(MapFailure.UNEXPECTED)
+        repository.getAgain()
+        settle()
+        fetcher.steps += fetcher.complete(v1)
+
+        repository.getAgain()
+        settle()
+
+        assertEquals(MapFileState.Ready(fetcher.requests.last().target), repository.state.value)
+        assertNotEquals(map, fetcher.requests.last().target)
     }
 
     @Test fun `a new copy asked for and answered signed out leaves no progress showing`() = runTest {
