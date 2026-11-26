@@ -198,6 +198,12 @@ class MapRepository @Inject constructor(
         }
     }
 
+    /** Takes back that a delete could not be saved: the map's state is a later check's to say. */
+    private fun dropDeleteFailed() {
+        val ready = _state.value as? MapFileState.Ready ?: return
+        if (ready.deleteFailed) _state.value = ready.copy(deleteFailed = false)
+    }
+
     /** Takes back why a new copy the driver asked for did not come, once nothing tries for it again by itself. */
     private fun dropAgainFailed() {
         val ready = _state.value as? MapFileState.Ready ?: return
@@ -220,6 +226,8 @@ class MapRepository @Inject constructor(
      * showing its progress, and tries again after a broken connection.
      */
     private suspend fun check(signedInTo: String, asked: Boolean): Outcome {
+        // A delete that failed before this check is old news once it runs, whatever it finds.
+        dropDeleteFailed()
         val record = store.load()
         if (signedInTo in record.deleted) {
             _state.value = MapFileState.Deleted
