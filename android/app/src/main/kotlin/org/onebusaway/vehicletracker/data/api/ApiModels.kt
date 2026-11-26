@@ -39,6 +39,9 @@ import org.onebusaway.vehicletracker.data.OccupancyStatus
 /** Where the agency's offline street map is; [pmtilesUrl] is null when the agency has none. */
 @Serializable data class MapConfigDto(@SerialName("pmtiles_url") val pmtilesUrl: String? = null)
 
+/** What the agency sets for its drivers. [privacyPolicyUrl] is null when it has no privacy policy link. */
+@Serializable data class AgencyDto(@SerialName("privacy_policy_url") val privacyPolicyUrl: String? = null)
+
 @Serializable data class LocationReportDto(
     @SerialName("vehicle_id") val vehicleId: String,
     /** GTFS trip_id; null (omitted on the wire) when the driver only knows the route. */

@@ -11,17 +11,20 @@ import org.onebusaway.vehicletracker.service.queuedFix
 
 /** [FileOfflineFixQueue.contents]: when the queued fixes were taken, and whose they are, read as a flow. */
 class FileOfflineFixQueueContentsTest {
+    private val driver = offlineQueueAccount("https://vp.example", "a@example.com")
+    private val driverB = offlineQueueAccount("https://vp.example", "b@example.com")
+
     @get:Rule val tmp = TemporaryFolder()
 
     @Test fun `the first collection reads what an earlier queue left in the file`() = runTest {
         val file = tmp.newFile("offline.jsonl")
         FileOfflineFixQueue(file).apply {
-            claimFor("driver a")
+            claimFor(driver)
             add(queuedFix("van-1", timestamp = 1L))
             add(queuedFix("van-1", timestamp = 2L))
         }
 
-        assertEquals(QueueContents(listOf(1L, 2L), "driver a"), FileOfflineFixQueue(file).contents.first())
+        assertEquals(QueueContents(listOf(1L, 2L), driver), FileOfflineFixQueue(file).contents.first())
     }
 
     @Test fun `it follows each add, removal and claim`() = runTest {
@@ -31,20 +34,20 @@ class FileOfflineFixQueueContentsTest {
             assertEquals(QueueContents(emptyList(), null), awaitItem())
             queue.add(queuedFix("van-1", timestamp = 1L))
             assertEquals(QueueContents(listOf(1L), null), awaitItem())
-            queue.claimIfUnowned("driver a")
-            assertEquals(QueueContents(listOf(1L), "driver a"), awaitItem())
+            queue.claimIfUnowned(driver)
+            assertEquals(QueueContents(listOf(1L), driver), awaitItem())
             (2L..4L).forEach { queue.add(queuedFix("van-1", timestamp = it)) }
             assertEquals(
                 "a full queue keeps its capacity",
-                QueueContents(listOf(2L, 3L, 4L), "driver a"),
+                QueueContents(listOf(2L, 3L, 4L), driver),
                 expectMostRecentItem(),
             )
             queue.remove(queue.oldest(2))
-            assertEquals(QueueContents(listOf(4L), "driver a"), awaitItem())
-            queue.claimFor("driver b")
+            assertEquals(QueueContents(listOf(4L), driver), awaitItem())
+            queue.claimFor(driverB)
             assertEquals(
                 "another driver's sign-in drops the fixes",
-                QueueContents(emptyList(), "driver b"),
+                QueueContents(emptyList(), driverB),
                 awaitItem(),
             )
         }
@@ -55,9 +58,9 @@ class FileOfflineFixQueueContentsTest {
         FileOfflineFixQueue(file).add(queuedFix("van-1"))
         val queue = FileOfflineFixQueue(file)
 
-        queue.claimIfUnowned("driver a")
+        queue.claimIfUnowned(driver)
 
-        assertEquals(QueueContents(listOf(1000L), "driver a"), queue.contents.first())
+        assertEquals(QueueContents(listOf(1000L), driver), queue.contents.first())
     }
 
     @Test fun `a queue that can't be read shows nothing waiting, rather than failing whoever reads it`() = runTest {

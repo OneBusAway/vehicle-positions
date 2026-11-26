@@ -69,7 +69,9 @@ import org.onebusaway.vehicletracker.ui.runs.TripRun
 import org.onebusaway.vehicletracker.ui.runs.runBoardTipText
 import org.onebusaway.vehicletracker.ui.settings.OfflineMap
 import org.onebusaway.vehicletracker.ui.settings.OfflineMapContent
+import org.onebusaway.vehicletracker.ui.settings.LicensesScreen
 import org.onebusaway.vehicletracker.ui.settings.PermissionCheckContent
+import org.onebusaway.vehicletracker.ui.settings.PrivacyContent
 import org.onebusaway.vehicletracker.ui.settings.PhoneAccess
 import org.onebusaway.vehicletracker.ui.settings.SettingsContent
 import org.onebusaway.vehicletracker.ui.settings.TripSettingsContent
@@ -273,7 +275,7 @@ class PseudolocaleScreensTest(private val tag: String) {
             theme = ThemeChoice.SYSTEM,
             screenOn = ScreenOn.CHARGING,
             offlineMap = OfflineMap.Ready(MapDetails(48_000_000, 1_789_000_000_000L, 1_790_000_000L)),
-            onBack = {}, onFix = {}, onPermissionCheck = {}, onTripSettings = {}, onOfflineMap = {}, onSignOut = {}, onSignedOut = {}, onChooseTheme = {}, onHelp = {}, onShare = {},
+            onBack = {}, onFix = {}, onPermissionCheck = {}, onTripSettings = {}, onOfflineMap = {}, onSignOut = {}, onSignedOut = {}, onChooseTheme = {}, onHelp = {}, onPrivacy = {}, onLicenses = {}, onShare = {},
         )
     }
 
@@ -285,6 +287,16 @@ class PseudolocaleScreensTest(private val tag: String) {
     @Test
     fun offlineMap() = check("offline-map", R.string.offline_map_title) {
         OfflineMapContent(OfflineMap.Ready(MapDetails(48_000_000, 1_789_000_000_000L, 1_790_000_000L)), onBack = {}, onGetAgain = {}, onDelete = {}, onTryAgain = {})
+    }
+
+    @Test
+    fun privacy() = check("privacy", R.string.privacy_title) {
+        PrivacyContent("metro.example", "https://metro.example/privacy", onBack = {}, onOpenPolicy = {})
+    }
+
+    @Test
+    fun licenses() = check("licenses", R.string.licenses_title) {
+        LicensesScreen(onBack = {}, onOpen = {})
     }
 
     @Test
