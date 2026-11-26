@@ -2,6 +2,8 @@ package org.onebusaway.vehicletracker.data
 
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeFalse
 import org.junit.Rule
 import org.junit.Test
@@ -64,20 +66,20 @@ class FileOfflineFixQueueTest {
     @Test fun `claiming for another account drops the queue, the same account keeps it`() = runTest {
         val file = tmp.newFile("offline.jsonl")
         val queue = FileOfflineFixQueue(file)
-        queue.claimFor("https://vp.example a@example.com")
+        queue.claimFor(driverA)
         queue.add(report(1))
-        queue.claimFor("https://vp.example a@example.com")
+        queue.claimFor(driverA)
         assertEquals(listOf(1L), queue.oldest(10).map { it.timestamp })
 
         val reopened = FileOfflineFixQueue(file)
-        reopened.claimFor("https://vp.example b@example.com")
+        reopened.claimFor(driverB)
         assertEquals(emptyList<Long>(), reopened.oldest(10).map { it.timestamp })
         assertEquals(emptyList<Long>(), FileOfflineFixQueue(file).oldest(10).map { it.timestamp })
     }
 
     // A driver who signed in on a build without the queue was never handed it, so it has no owner file.
-    private val driverA = "https://vp.example a@example.com"
-    private val driverB = "https://vp.example b@example.com"
+    private val driverA = offlineQueueAccount("https://vp.example", "a@example.com")
+    private val driverB = offlineQueueAccount("https://vp.example", "b@example.com")
 
     @Test fun `an unowned queue claimed for the restored session keeps its fixes at that driver's sign-in`() = runTest {
         val file = tmp.newFile("offline.jsonl")
@@ -128,5 +130,50 @@ class FileOfflineFixQueueTest {
         }
 
         assertEquals(listOf(1L), queue.oldest(10).map { it.timestamp })
+    }
+
+    // --- Whose the queue is, kept without the email ---
+
+    @Test fun `the owner is kept as a hash, with no email in the file`() = runTest {
+        val file = tmp.newFile("offline.jsonl")
+        FileOfflineFixQueue(file).claimFor(driverA)
+
+        val stored = File("${file.path}.owner").readText()
+        assertTrue("a SHA-256, was $stored", Regex("[0-9a-f]{64}").matches(stored))
+        assertFalse("a@example.com" in stored)
+        assertEquals("the same server and email however they were typed", driverA, offlineQueueAccount("https://vp.example/", " A@example.com "))
+    }
+
+    // An older build wrote "<server> <email>": the next launch reads the queue to schedule its upload.
+    @Test fun `an owner an older build wrote in the clear is hashed at the next read, and the queue stays its driver's`() = runTest {
+        val file = tmp.newFile("offline.jsonl")
+        FileOfflineFixQueue(file).add(report(1))
+        val owner = File("${file.path}.owner").apply { writeText("https://vp.example a@example.com") }
+
+        val atLaunch = FileOfflineFixQueue(file)
+        assertEquals(listOf(1L), atLaunch.oldest(1).map { it.timestamp })
+
+        assertEquals(driverA, owner.readText())
+        assertEquals(driverA, atLaunch.owner())
+        val atSignIn = FileOfflineFixQueue(file)
+        atSignIn.claimFor(driverA)
+        assertEquals("not dropped as another driver's", listOf(1L), atSignIn.oldest(10).map { it.timestamp })
+    }
+
+    @Test fun `a hash that can't be written back is still the driver's this time`() = runTest {
+        val file = tmp.newFile("offline.jsonl")
+        FileOfflineFixQueue(file).add(report(1))
+        val owner = File("${file.path}.owner").apply { writeText("https://vp.example a@example.com") }
+        owner.setWritable(false)
+        try {
+            assumeFalse("the file is still writable, as it is for root", owner.canWrite())
+            val queue = FileOfflineFixQueue(file)
+
+            assertEquals(driverA, queue.owner())
+            queue.claimFor(driverA)
+            assertEquals(listOf(1L), queue.oldest(10).map { it.timestamp })
+        } finally {
+            owner.setWritable(true)
+        }
     }
 }

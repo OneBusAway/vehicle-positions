@@ -219,7 +219,7 @@
     <string name="privacy_account">Your email and the server</string>
     <string name="privacy_account_detail">The email goes when you sign out. The server stays.</string>
     <string name="privacy_kept">Reports with no connection</string>
-    <string name="privacy_kept_detail">Sent when there is a connection again. Any still here after a day are dropped.</string>
+    <string name="privacy_kept_detail">Sent when there is a connection again, while you\'re signed in. Any still here after a day are dropped.</string>
     <!-- Privacy, More: a link to the agency's own privacy policy, which opens in the phone's browser. -->
     <string name="privacy_policy">Your agency\'s privacy policy</string>
     <string name="privacy_policy_detail">Opens in the browser</string>

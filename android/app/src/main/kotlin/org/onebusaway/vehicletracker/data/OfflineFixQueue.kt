@@ -15,6 +15,8 @@ import java.io.FileOutputStream
 import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import java.security.MessageDigest
+import java.util.Locale
 
 /**
  * A day of fixes at one every ten seconds. A phone out of coverage for longer than that loses its
@@ -65,7 +67,7 @@ interface OfflineFixQueue {
      */
     suspend fun claimIfUnowned(account: String)
 
-    /** The account the queue was last handed to, or null when it has no owner. */
+    /** The account the queue was last handed to, or null when it has no owner. As [offlineQueueAccount] gives it. */
     suspend fun owner(): String?
 
     /**
@@ -81,8 +83,16 @@ data class QueueContents(val timestamps: List<Long>, val owner: String?)
 /** The server as the queue and the saved map compare it: the same base URL with or without a trailing slash. */
 fun normalizedServerUrl(serverUrl: String) = serverUrl.trimEnd('/')
 
-/** The account [OfflineFixQueue.claimFor] compares: the same server and email however they were typed. */
-fun offlineQueueAccount(serverUrl: String, email: String) = "${normalizedServerUrl(serverUrl)} ${email.trim().lowercase()}"
+/**
+ * The account [OfflineFixQueue.claimFor] compares: the same server and email however they were typed, as a SHA-256.
+ * The queue only compares it, and its file outlives Sign out, so the email is never written in the clear.
+ */
+fun offlineQueueAccount(serverUrl: String, email: String) = sha256Hex("${normalizedServerUrl(serverUrl)} ${email.trim().lowercase()}")
+
+private fun sha256Hex(text: String): String =
+    MessageDigest.getInstance("SHA-256").digest(text.toByteArray()).joinToString("") { "%02x".format(Locale.ROOT, it) }
+
+private val SHA256_HEX = Regex("[0-9a-f]{64}")
 
 /**
  * Keeps the queue as one JSON report per line in [file], so it survives the tracking service and
@@ -141,7 +151,7 @@ class FileOfflineFixQueue(
     }
 
     override suspend fun claimFor(account: String) = locked { q ->
-        if (ownerFile.takeIf { it.exists() }?.readText() == account) return@locked
+        if (readOwner() == account) return@locked
         if (q.isNotEmpty()) {
             AppLog.w(TAG, "Dropping ${q.size} fixes queued under another account")
             q.clear()
@@ -170,7 +180,7 @@ class FileOfflineFixQueue(
     }
 
     override suspend fun owner(): String? = withContext(Dispatchers.IO) {
-        mutex.withLock { ownerFile.takeIf { it.exists() }?.readText() }
+        mutex.withLock { readOwner() }
     }
 
     private suspend fun <T> locked(block: (ArrayDeque<LocationReportDto>) -> T): T = withContext(Dispatchers.IO) {
@@ -186,7 +196,7 @@ class FileOfflineFixQueue(
     }
 
     private fun load(): ArrayDeque<LocationReportDto> {
-        knownOwner = ownerFile.takeIf { it.exists() }?.readText()
+        knownOwner = readOwner()
         if (!file.exists()) return ArrayDeque()
         // A line cut short by a crash mid-append is skipped, not allowed to cost the rest.
         val text = file.readText()
@@ -199,6 +209,24 @@ class FileOfflineFixQueue(
         // Left in place, the cut-short line would join the next append and cost that fix too.
         if (loaded.size != lines.size || (text.isNotEmpty() && !text.endsWith("\n"))) rewrite(loaded)
         return loaded
+    }
+
+    /**
+     * Who owns the queue, as [offlineQueueAccount] gives it. A build before it was hashed wrote the server and email in
+     * the clear, the same text it hashes, so that is hashed now and written back: the email leaves the phone at the next
+     * launch, which reads the queue, and the queue stays its driver's.
+     */
+    private fun readOwner(): String? {
+        val stored = ownerFile.takeIf { it.exists() }?.readText() ?: return null
+        if (SHA256_HEX.matches(stored)) return stored
+        val hashed = sha256Hex(stored)
+        try {
+            ownerFile.writeText(hashed)
+        } catch (e: IOException) {
+            // Hashed here all the same, so the queue is still the driver's; the next read tries again.
+            AppLog.w(TAG, "Could not hash who owns the queued fixes", e)
+        }
+        return hashed
     }
 
     private fun rewrite(q: ArrayDeque<LocationReportDto>) {
