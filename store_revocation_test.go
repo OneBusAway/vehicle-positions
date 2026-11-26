@@ -445,3 +445,41 @@ func TestTokenPruner_AgainstTheDatabase(t *testing.T) {
 	assert.Equal(t, 1, countRevocationRows(t, store, justExpired))
 	assert.Equal(t, 1, countRevocationRows(t, store, live))
 }
+
+// TestStore_SessionsEndByTheStoresClock: a deactivation and a role change end
+// the account's sign-ins at the time the store's clock gives, the one tokens are
+// issued by, not the database's. They never move that end earlier.
+func TestStore_SessionsEndByTheStoresClock(t *testing.T) {
+	store := newTestStore(t)
+	ctx := asTestAdmin()
+	email := uniqueEmail(t)
+	t.Cleanup(func() { cleanupTestUsers(t, store, email) })
+	user, err := store.CreateUser(ctx, "Store Clock", email, "password123", roleDriver)
+	require.NoError(t, err)
+	// Far off the database's clock, and in microseconds, as Postgres keeps it.
+	at := time.Now().Add(37 * time.Minute).Truncate(time.Microsecond)
+	store.clock = func() time.Time { return at }
+	t.Cleanup(func() { store.clock = nil })
+	ended := func() time.Time {
+		t.Helper()
+		got := sessionsValidAfter(t, store, user.ID)
+		require.NotNil(t, got)
+		return *got
+	}
+
+	require.NoError(t, store.SetUserActiveAndRevokeSessions(ctx, user.ID, false))
+	assert.True(t, ended().Equal(at), "deactivated at %s, not %s", ended(), at)
+	require.NoError(t, store.SetUserActiveAndRevokeSessions(ctx, user.ID, true))
+
+	at = at.Add(time.Second)
+	_, err = store.UpdateUser(ctx, user.ID, "Store Clock", email, roleAdmin)
+	require.NoError(t, err)
+	assert.True(t, ended().Equal(at), "role changed at %s, not %s", ended(), at)
+
+	latest := at
+	at = at.Add(-time.Hour)
+	_, err = store.UpdateUser(ctx, user.ID, "Store Clock", email, roleDriver)
+	require.NoError(t, err)
+	require.NoError(t, store.SetUserActiveAndRevokeSessions(ctx, user.ID, false))
+	assert.True(t, ended().Equal(latest), "a clock set back must not end sign-ins earlier: %s", ended())
+}

@@ -269,7 +269,7 @@ func (s *Store) UpdateUser(ctx context.Context, id int64, name, email, role stri
 	var row db.UpdateUserRow
 	err := s.inTx(ctx, func(q *db.Queries) error {
 		var err error
-		row, err = updateUser(ctx, q, id, name, email, role)
+		row, err = updateUser(ctx, q, s.now, id, name, email, role)
 		return err
 	})
 	if err != nil {
@@ -291,8 +291,9 @@ func (s *Store) UpdateUser(ctx context.Context, id int64, name, email, role stri
 // updateUser is UpdateUser through q, recording what changed in the audit
 // log. The user form, the API and the CSV import all update accounts through
 // it. It returns ErrUserNotFound, ErrDuplicateEmail and ErrViewerWithTrip as
-// UpdateUser does.
-func updateUser(ctx context.Context, q *db.Queries, id int64, name, email, role string) (db.UpdateUserRow, error) {
+// UpdateUser does. now is the store's clock, which a role change's end of the
+// account's sign-ins is read from (Store.clock).
+func updateUser(ctx context.Context, q *db.Queries, now func() time.Time, id int64, name, email, role string) (db.UpdateUserRow, error) {
 	old, err := q.GetUserForUpdate(ctx, id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return db.UpdateUserRow{}, ErrUserNotFound
@@ -301,10 +302,11 @@ func updateUser(ctx context.Context, q *db.Queries, id int64, name, email, role 
 		return db.UpdateUserRow{}, fmt.Errorf("update user: %w", err)
 	}
 	row, err := q.UpdateUser(ctx, db.UpdateUserParams{
-		Name:  name,
-		Email: email,
-		Role:  role,
-		ID:    id,
+		Name:    name,
+		Email:   email,
+		Role:    role,
+		EndedAt: pgtype.Timestamptz{Time: now(), Valid: true},
+		ID:      id,
 	})
 	if err != nil {
 		if isDuplicateEmail(err) {

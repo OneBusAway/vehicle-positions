@@ -37,7 +37,7 @@ func (s *Store) signIn(ctx context.Context, user *User, write func(q *db.Queries
 		if account.PasswordHash != user.PasswordHash || !account.Active {
 			return ErrAccountChangedMeanwhile
 		}
-		signedInAt = time.Now()
+		signedInAt = s.now()
 		if write != nil {
 			if err := write(q); err != nil {
 				return err

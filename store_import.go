@@ -426,7 +426,7 @@ func (s *Store) ImportDrivers(ctx context.Context, preview importPreview, rows [
 		case importUpdate:
 			if p.rename {
 				cur := locked[i]
-				if _, err := updateUser(ctx, q, p.userID, row.Name, cur.Email, cur.Role); err != nil {
+				if _, err := updateUser(ctx, q, s.now, p.userID, row.Name, cur.Email, cur.Role); err != nil {
 					return nil, fmt.Errorf("update user %d: %w", p.userID, err)
 				}
 			}

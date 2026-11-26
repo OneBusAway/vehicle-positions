@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-	"time"
 
 	"github.com/OneBusAway/vehicle-positions/db"
 	"github.com/jackc/pgx/v5"
@@ -83,8 +82,9 @@ func (s *Store) ChangeOwnPassword(ctx context.Context, change passwordChange) er
 		return fmt.Errorf("lock user: %w", err)
 	}
 	// Read under the lock, as a refresh reads the time its token counts as issued
-	// at, and from the same clock: every refresh is before this or after it.
-	now := time.Now()
+	// at, and from the same clock (Store.now): every refresh is before this or
+	// after it.
+	now := s.now()
 	if current != change.CheckedHash {
 		return ErrPasswordChangedMeanwhile
 	}
