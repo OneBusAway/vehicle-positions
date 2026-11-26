@@ -242,6 +242,9 @@
     <string name="offline_map_again_unusable">The new file is not usable. Tell your agency.</string>
     <string name="offline_map_again_needs_https">The map link must use https. Tell your agency.</string>
     <string name="offline_map_again_unexpected">Something went wrong on the phone. Try again.</string>
+    <!-- Under Ready, when the driver deleted the map and it could not be done: the map is still here, and Delete is still there. A heading, then why. -->
+    <string name="offline_map_delete_failed">Couldn\'t delete it</string>
+    <string name="offline_map_delete_failed_detail">Something went wrong on the phone. Try again.</string>
     <!-- The map's facts, each beside its value: its size, e.g. "48 MB", the day it was downloaded, and when the app last asked whether there is a newer one. -->
     <string name="offline_map_size">Size</string>
     <string name="offline_map_fetched">Fetched</string>

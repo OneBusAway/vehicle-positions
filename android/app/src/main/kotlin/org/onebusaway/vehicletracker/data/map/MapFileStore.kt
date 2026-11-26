@@ -65,15 +65,20 @@ class MapFileStore(
     private val metadata = File(directory, METADATA)
     private val temp = File(directory, "$METADATA.tmp")
 
-    /** What `map.json` says, or an empty record when there is none or it cannot be read. */
+    /**
+     * What `map.json` says, or an empty record when there is none. A read that fails throws, so
+     * nothing is downloaded or saved over a record nobody could see, such as which servers' maps
+     * the driver deleted.
+     */
     suspend fun load(): MapRecord = withContext(io) {
         if (!metadata.exists()) return@withContext MapRecord()
+        val text = metadata.readText()
         try {
-            json.decodeFromString(MapRecord.serializer(), metadata.readText())
-        } catch (e: Exception) {
-            // Unreadable is as good as empty: the map is downloaded again, and the files the
-            // record named go at the next start.
-            AppLog.w(TAG, "Could not read the map record", e)
+            json.decodeFromString(MapRecord.serializer(), text)
+        } catch (e: IllegalArgumentException) {
+            // Read, but not a record this build understands, and it never will be: as good as
+            // empty, so the map is downloaded again and the files it named go at the next start.
+            AppLog.w(TAG, "Could not make sense of the map record", e)
             MapRecord()
         }
     }
