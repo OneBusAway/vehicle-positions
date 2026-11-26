@@ -32,6 +32,8 @@ import Foundation
     /// a test can act while an upload is out. What it throws is the upload's
     /// error.
     nonisolated(unsafe) var whileUploadingHistory: (() async throws -> Void)?
+    nonisolated(unsafe) var agencyInfo = AgencyInfo(privacyPolicyURL: nil)
+    nonisolated(unsafe) var agencyError: (any Error)?
 
     private(set) nonisolated(unsafe) var logins: [(String, String)] = []
     private(set) nonisolated(unsafe) var tripRequests: [String] = []
@@ -80,6 +82,11 @@ import Foundation
         posted.append(report)
         if let postError { throw postError }
     }
+    func agency() async throws -> AgencyInfo {
+        if let agencyError { throw agencyError }
+        return agencyInfo
+    }
+
     func postLocationHistory(_ request: LocationHistoryRequest) async throws {
         try await whileUploadingHistory?()
         historyUploads.append(request)

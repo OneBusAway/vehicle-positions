@@ -45,6 +45,17 @@ import Testing
         #expect(StubURLProtocol.last?.url.path == "/api/v1/vehicles")
     }
 
+    @Test func theAgencysPrivacyPolicyLinkIsRead() async throws {
+        StubURLProtocol.reset { _ in (200, Data(#"{"privacy_policy_url":"https://metro.example/privacy"}"#.utf8)) }
+        #expect(try await client().agency() == AgencyInfo(privacyPolicyURL: "https://metro.example/privacy"))
+        #expect(StubURLProtocol.last?.method == "GET")
+        #expect(StubURLProtocol.last?.url.path == "/api/v1/agency")
+        #expect(StubURLProtocol.last?.headers["Authorization"] == "Bearer tok")
+
+        StubURLProtocol.reset { _ in (200, Data(#"{"privacy_policy_url":null}"#.utf8)) }
+        #expect(try await client().agency() == AgencyInfo(privacyPolicyURL: nil))
+    }
+
     @Test func routesAndTripsDecode() async throws {
         StubURLProtocol.reset { req in
             if req.url!.path.hasSuffix("/trips") {

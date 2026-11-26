@@ -839,6 +839,22 @@ final class TripSession {
         }
     }
 
+    /// The agency's privacy policy link, from the server signed in. Nil when it
+    /// gives none, when it is older than the link and answers 404, when it
+    /// can't be reached, and when the link is not https: it opens in the
+    /// browser as it is.
+    func privacyPolicyLink() async -> URL? {
+        guard let api else { return nil }
+        do {
+            return try await api.agency().privacyPolicyURL.flatMap(PrivacyPolicy.httpsLink)
+        } catch APIError.status(404, _) {
+            return nil
+        } catch {
+            log.notice("no privacy policy link: \(String(describing: error), privacy: .public)")
+            return nil
+        }
+    }
+
     private func requireAPI() throws -> any TrackerAPI {
         guard let api else { throw TripSessionError.notSignedIn }
         return api

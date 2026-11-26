@@ -75,6 +75,10 @@ nonisolated final class TrackerClient: TrackerAPI, Sendable {
         _ = try await send("POST", "api/v1/locations/history", body: try encode(request))
     }
 
+    func agency() async throws -> AgencyInfo {
+        try decode(AgencyInfo.self, try await send("GET", "api/v1/agency"))
+    }
+
     /// `path` with `id` after it as one segment. A GTFS id can hold a "/",
     /// which `appending(path:)` leaves as a separator, so the server sees
     /// another path and answers 404; it reads "%2F" back as part of the id.
