@@ -6,9 +6,7 @@ import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.SocketPolicy
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.onebusaway.vehicletracker.data.api.ApiFactory
@@ -53,6 +51,12 @@ class PrivacyPolicyTest {
         assertNull(policy.link())
     }
 
+    @Test fun `a link with its scheme in capitals opens with it in lower case`() = runTest {
+        answer("""{"privacy_policy_url":"HTTPS://metro.example/Privacy"}""")
+
+        assertEquals("https://metro.example/Privacy", policy.link())
+    }
+
     @Test fun `a link that is not https is not opened`() = runTest {
         answer("""{"privacy_policy_url":"http://metro.example/privacy"}""")
 
@@ -75,13 +79,14 @@ class PrivacyPolicyTest {
         assertEquals(0, server.requestCount)
     }
 
-    @Test fun `only an https address with a host opens as it is`() {
-        assertTrue(isHttpsLink("https://metro.example/privacy"))
-        assertTrue(isHttpsLink("HTTPS://metro.example"))
-        assertFalse(isHttpsLink("http://metro.example/privacy"))
-        assertFalse(isHttpsLink("https:///privacy"))
-        assertFalse(isHttpsLink("javascript:alert(1)"))
-        assertFalse(isHttpsLink("https://metro example"))
-        assertFalse(isHttpsLink(""))
+    @Test fun `only an https address with a host opens, as it is but for its scheme`() {
+        assertEquals("https://metro.example/privacy", httpsLink("https://metro.example/privacy"))
+        assertEquals("https://metro.example", httpsLink("HTTPS://metro.example"))
+        assertEquals("https://Metro.example/A?b=C", httpsLink("Https://Metro.example/A?b=C"))
+        assertNull(httpsLink("http://metro.example/privacy"))
+        assertNull(httpsLink("https:///privacy"))
+        assertNull(httpsLink("javascript:alert(1)"))
+        assertNull(httpsLink("https://metro example"))
+        assertNull(httpsLink(""))
     }
 }
