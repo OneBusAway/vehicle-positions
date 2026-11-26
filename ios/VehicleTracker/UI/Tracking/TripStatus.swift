@@ -84,6 +84,13 @@ struct TripStatus: Equatable {
         var answer: Answer
         var problem: Problem.Kind?
         var isSignedOut: Bool
+
+        /// While it is `on`, a problem appearing, or giving way to another,
+        /// vibrates the phone, and so does being signed out; one clearing
+        /// does not (DESIGN-iOS §2.7).
+        func vibrates(after old: Category, on: Bool) -> Bool {
+            on && ((problem != nil && problem != old.problem) || (isSignedOut && !old.isSignedOut))
+        }
     }
 
     let active: ActiveTrip

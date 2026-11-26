@@ -55,6 +55,40 @@ import Testing
         #expect(idleTimer.isDisabled)
     }
 
+    // MARK: Always on
+
+    @Test func alwaysOnHoldsOnBatteryToo() {
+        let awake = coordinator()
+        awake.screenOn = .always
+        #expect(!idleTimer.isDisabled, "no screen wants it yet")
+        awake.acquire(owner: ObjectIdentifier(tracking))
+        #expect(idleTimer.isDisabled)
+        power.plug()
+        power.unplug()
+        #expect(idleTimer.isDisabled)
+        awake.release(owner: ObjectIdentifier(tracking))
+        #expect(!idleTimer.isDisabled)
+    }
+
+    /// The driver chose it.
+    @Test func alwaysOnHoldsInLowPowerModeToo() {
+        let awake = coordinator()
+        awake.screenOn = .always
+        awake.acquire(owner: ObjectIdentifier(tracking))
+        power.setLowPowerMode(true)
+        #expect(idleTimer.isDisabled)
+    }
+
+    @Test func aChangeOfChoiceIsFollowedAtOnce() {
+        let awake = coordinator()
+        awake.acquire(owner: ObjectIdentifier(tracking))
+        #expect(!idleTimer.isDisabled)
+        awake.screenOn = .always
+        #expect(idleTimer.isDisabled)
+        awake.screenOn = .charging
+        #expect(!idleTimer.isDisabled)
+    }
+
     @Test func theLastReleaseRestoresWhatTheTimerWas() {
         power.batteryState = .charging
         let awake = coordinator()

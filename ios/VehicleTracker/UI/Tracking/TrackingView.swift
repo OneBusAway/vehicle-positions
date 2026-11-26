@@ -53,7 +53,7 @@ struct TrackingView: View {
         }
         .coordinateSpace(.named("tracking"))
         .animation(.smooth(duration: 0.2), value: following.isFollowing)
-        .keepsScreenAwakeWhileCharging()
+        .keepsScreenAwake(session.settings.screenOn)
         .onDisappear { following.stop() }
         .onChange(of: wantedExpanded, initial: true) { _, wanted in
             if detent == .height(peek) { expanded = wanted }
@@ -82,7 +82,8 @@ struct TrackingView: View {
     }
 
     private var framing: FollowFraming {
-        FollowFraming(mapHeight: map.height, coveredTop: map.safeTop + cardBottom, coveredBottom: peek + map.safeBottom)
+        FollowFraming(mapHeight: map.height, coveredTop: map.safeTop + cardBottom, coveredBottom: peek + map.safeBottom,
+                      up: session.settings.mapUp)
     }
 }
 
@@ -111,6 +112,7 @@ private struct StatusArea: View {
 
     var body: some View {
         let waiting = session.reportsWaiting
+        let vibrates = session.settings.vibratesOnProblem
         if let status = TripStatus(phase: session.phase, latest: session.latest, reporting: session.reporting,
                                    reportsWaiting: waiting.count) {
             VStack(spacing: 8) {
@@ -129,10 +131,7 @@ private struct StatusArea: View {
                 }
             }
             .animation(.smooth(duration: 0.25), value: status.category)
-            // A problem appearing, or giving way to another, taps the wrist;
-            // one clearing does not (DESIGN-iOS §2.7).
-            .sensoryFeedback(.warning, trigger: status.problem?.kind) { old, new in new != nil && old != new }
-            .sensoryFeedback(.warning, trigger: status.isSignedOut) { _, signedOut in signedOut }
+            .sensoryFeedback(.warning, trigger: status.category) { old, new in new.vibrates(after: old, on: vibrates) }
             // A change of kind is read out, as the problem that appeared or
             // the card; the minutes moving inside one kind are not.
             .onChange(of: status.category) { old, _ in

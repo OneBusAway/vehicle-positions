@@ -10238,6 +10238,9 @@
         }
       }
     },
+    "Always on" : {
+      "comment" : "During a trip, under 'Screen': the phone's display stays on, charging or not."
+    },
     "An operator has to load one before trips can start. Tell your agency's admin." : {
       "comment" : "Empty state text under 'No schedule on this server yet'.",
       "localizations" : {
@@ -16824,6 +16827,9 @@
           }
         }
       }
+    },
+    "During a trip" : {
+      "comment" : "The title of a page opened from Settings, with choices for the Tracking screen. It names its row in Settings too."
     },
     "Email" : {
       "comment" : "Label of the sign-in screen's email field.",
@@ -24628,6 +24634,9 @@
         }
       }
     },
+    "Map" : {
+      "comment" : "During a trip: the heading over two choices, with a picture each, of what is at the top of the map."
+    },
     "Next %@ · %@" : {
       "comment" : "Status card line 2 while off schedule: the next stop's name, then its scheduled time in the agency's zone.",
       "localizations" : {
@@ -25325,6 +25334,9 @@
           }
         }
       }
+    },
+    "No connection, no GPS, or signed out" : {
+      "comment" : "During a trip, under 'Vibrate when reporting has a problem': the problems the phone vibrates for."
     },
     "No GPS" : {
       "comment" : "Trip sheet Reports row: there is no position to report.",
@@ -26709,6 +26721,9 @@
           }
         }
       }
+    },
+    "North up" : {
+      "comment" : "During a trip, under 'Map': the map has north at the top."
     },
     "Not a driver account" : {
       "comment" : "Empty state title in place of the vehicle list when the account signed in turns out to be a viewer's, which can look at the agency's admin website but not drive. The phone has signed it out.",
@@ -28619,6 +28634,9 @@
         }
       }
     },
+    "On battery it goes dark as usual" : {
+      "comment" : "During a trip, under 'On while charging': what the phone's display does when the phone is not charging."
+    },
     "On the status card" : {
       "comment" : "Help: the heading over what the status card on Tracking can say.",
       "localizations" : {
@@ -28964,6 +28982,9 @@
           }
         }
       }
+    },
+    "On while charging" : {
+      "comment" : "During a trip, under 'Screen': the phone's display stays on while it charges."
     },
     "Only approximate was allowed" : {
       "comment" : "Checklist: in place of the Precise location row's reason once only approximate location was allowed.",
@@ -40207,6 +40228,15 @@
           }
         }
       }
+    },
+    "Screen" : {
+      "comment" : "During a trip: the heading over two choices of when the phone's display stays on, each over what it means."
+    },
+    "Screen always on" : {
+      "comment" : "Settings, on the During a trip row: when the phone's display stays on."
+    },
+    "Screen on while charging" : {
+      "comment" : "Settings, on the During a trip row: when the phone's display stays on."
     },
     "Search by the number on the sign, or part of the name." : {
       "comment" : "Empty state text under 'No route matches …'.",
@@ -52709,6 +52739,9 @@
         }
       }
     },
+    "The way you drive" : {
+      "comment" : "During a trip, under 'Map': the map turns so that the way the vehicle goes is at the top."
+    },
     "Theme" : {
       "comment" : "Settings: the row that names the theme the app is shown in, at its end. A tap opens a menu of the themes."
     },
@@ -56363,6 +56396,9 @@
         }
       }
     },
+    "Uses more battery" : {
+      "comment" : "During a trip, under 'Always on'."
+    },
     "Vehicle %@" : {
       "comment" : "Resume card: the vehicle's fleet number, e.g. 'Vehicle 4317'.\nSubtitle of the route screen: the fleet number of the vehicle the driver chose, e.g. 'Vehicle 4317'.\nVoiceOver: the vehicle's row of the stop list before the first fix, and the vehicle on the map: its label or fleet number, e.g. 'Vehicle 4317'.",
       "localizations" : {
@@ -57945,6 +57981,9 @@
           }
         }
       }
+    },
+    "Vibrate when reporting has a problem" : {
+      "comment" : "During a trip: a switch, over the problems it is for."
     },
     "Waiting for GPS" : {
       "comment" : "Status card answer before the trip's first position fix.",

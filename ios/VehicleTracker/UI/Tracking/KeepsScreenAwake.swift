@@ -1,16 +1,17 @@
 import SwiftUI
 
-/// Identifies one mounted `keepsScreenAwakeWhileCharging()` to the
-/// coordinator. A class purely so it has an address: leases are keyed by
-/// `ObjectIdentifier`, and `@State` gives it the view's lifetime, which is
-/// the lease's.
+/// Identifies one mounted `keepsScreenAwake(_:)` to the coordinator. A class
+/// purely so it has an address: leases are keyed by `ObjectIdentifier`, and
+/// `@State` gives it the view's lifetime, which is the lease's.
 private final class ScreenAwakeLeaseToken {}
 
 /// Takes the lease on appear and returns it on disappear. Neither fires when
 /// the app goes to the background with the screen still mounted, so the hold
 /// is also dropped on `.background` and taken again on `.active`; `.inactive`
 /// (Control Center, a banner) keeps it.
-private struct KeepsScreenAwakeWhileCharging: ViewModifier {
+private struct KeepsScreenAwake: ViewModifier {
+    let choice: ScreenOn
+
     @Environment(ScreenAwakeCoordinator.self) private var coordinator
     @Environment(\.scenePhase) private var scenePhase
     @State private var token = ScreenAwakeLeaseToken()
@@ -19,6 +20,7 @@ private struct KeepsScreenAwakeWhileCharging: ViewModifier {
 
     func body(content: Content) -> some View {
         content
+            .onChange(of: choice, initial: true) { _, choice in coordinator.screenOn = choice }
             .onAppear { coordinator.acquire(owner: owner) }
             .onDisappear { coordinator.release(owner: owner) }
             .onChange(of: scenePhase) { _, phase in
@@ -33,9 +35,9 @@ private struct KeepsScreenAwakeWhileCharging: ViewModifier {
 }
 
 extension View {
-    /// Keeps the display on while this view is on screen and the phone is
-    /// charging (DESIGN-iOS §4.7.7).
-    func keepsScreenAwakeWhileCharging() -> some View {
-        modifier(KeepsScreenAwakeWhileCharging())
+    /// Keeps the display on while this view is on screen, by `choice`
+    /// (DESIGN-iOS §4.7.7).
+    func keepsScreenAwake(_ choice: ScreenOn) -> some View {
+        modifier(KeepsScreenAwake(choice: choice))
     }
 }

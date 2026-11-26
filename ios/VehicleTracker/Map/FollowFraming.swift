@@ -3,8 +3,10 @@ import Foundation
 /// Where the vehicle sits on the map while following, from Android's
 /// `FollowPadding.kt` and `FollowZoom.kt`: a third of the way up the part of
 /// the map that the status card and the trip sheet leave uncovered, with
-/// 500 m of road between it and the top of that part. Points here; the map
-/// turns them into a camera by measuring what a point covers.
+/// 500 m of road between it and the top of that part. With north up the road
+/// ahead can run any way, so the vehicle is in the middle of that part.
+/// Points here; the map turns them into a camera by measuring what a point
+/// covers.
 struct FollowFraming: Equatable {
     /// How much road the map keeps between the vehicle and the top of the
     /// uncovered part.
@@ -15,14 +17,20 @@ struct FollowFraming: Equatable {
     let coveredTop: Double
     /// Points at the bottom the sheet draws over.
     let coveredBottom: Double
+    /// What is up on the map.
+    let up: MapUp
 
     var uncoveredHeight: Double {
         max(0, mapHeight - coveredTop - coveredBottom)
     }
 
-    /// Points from the vehicle to the top of the uncovered part: two thirds of it.
+    /// Points from the vehicle to the top of the uncovered part: two thirds of
+    /// it, or with north up half.
     var pointsAhead: Double {
-        uncoveredHeight * 2 / 3
+        switch up {
+        case .heading: uncoveredHeight * 2 / 3
+        case .north: uncoveredHeight / 2
+        }
     }
 
     /// The vehicle's distance from the top of the map.
@@ -31,7 +39,7 @@ struct FollowFraming: Equatable {
     }
 
     /// How far below the map's centre the vehicle sits. The camera centres
-    /// that far ahead of it, so the road ahead fills the uncovered part.
+    /// that far above it on the screen, so the vehicle lands there.
     var vehicleOffsetFromCentre: Double {
         vehicleY - mapHeight / 2
     }

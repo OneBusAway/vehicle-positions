@@ -22,6 +22,17 @@ nonisolated enum ThemeChoice: String, CaseIterable {
     case system, light, dark
 }
 
+/// When the display stays on while Tracking shows, chosen in Settings.
+nonisolated enum ScreenOn: String, CaseIterable {
+    case charging, always
+}
+
+/// What is up on Tracking's map, chosen in Settings: the way the vehicle goes,
+/// or north.
+nonisolated enum MapUp: String, CaseIterable {
+    case heading, north
+}
+
 /// What the driver typed last time, so the login screen and the route list
 /// start where they left off, and the server address the agency sets, if any.
 /// Nothing secret lives here; the token is in the Keychain.
@@ -62,6 +73,18 @@ final class AppSettings {
     var theme: ThemeChoice {
         didSet { defaults.set(theme.rawValue, forKey: Keys.theme) }
     }
+    /// What Tracking does during a trip. The phone's, not the driver's: a
+    /// sign-out leaves all three.
+    var screenOn: ScreenOn {
+        didSet { defaults.set(screenOn.rawValue, forKey: Keys.screenOn) }
+    }
+    var mapUp: MapUp {
+        didSet { defaults.set(mapUp.rawValue, forKey: Keys.mapUp) }
+    }
+    /// Whether the phone vibrates when reporting has a problem.
+    var vibratesOnProblem: Bool {
+        didSet { defaults.set(vibratesOnProblem, forKey: Keys.vibratesOnProblem) }
+    }
     /// What each driver has been shown once, by `driverKey`: per driver, not
     /// per phone, so the next driver on a shared phone is shown it too. A
     /// sign-out leaves it. Stored sorted, so the file does not churn.
@@ -95,6 +118,9 @@ final class AppSettings {
         recentVehicleIDs = defaults.stringArray(forKey: Keys.recentVehicles)
             ?? [defaults.string(forKey: Keys.legacyLastVehicle)].compactMap { $0 }
         theme = defaults.string(forKey: Keys.theme).flatMap(ThemeChoice.init) ?? .system
+        screenOn = defaults.string(forKey: Keys.screenOn).flatMap(ScreenOn.init) ?? .charging
+        mapUp = defaults.string(forKey: Keys.mapUp).flatMap(MapUp.init) ?? .heading
+        vibratesOnProblem = defaults.object(forKey: Keys.vibratesOnProblem) as? Bool ?? true
         seenByDriver = (defaults.dictionary(forKey: Keys.seenByDriver) as? [String: [String]] ?? [:]).mapValues(Set.init)
         readManagedConfiguration()
         if !defaultServerURL.isEmpty && self.defaultServerURL == nil {
@@ -200,6 +226,9 @@ final class AppSettings {
         static let favoriteVehicles = "favoriteVehicleIDs"
         static let recentVehicles = "recentVehicleIDs"
         static let theme = "theme"
+        static let screenOn = "screenOn"
+        static let mapUp = "mapUp"
+        static let vibratesOnProblem = "vibratesOnProblem"
         static let seenByDriver = "seenByDriver"
         /// Written by builds before favourites and recents; read as a fallback only.
         static let legacyLastVehicle = "lastVehicleID"
