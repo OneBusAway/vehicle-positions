@@ -238,10 +238,12 @@ Run these in order against a single trip; check 5 ends it.
    filled. Tap the tile, then route **1 Straight**. **Choose a run** shows
    the day's runs as a board under **Vehicle bus-1 · Route 1**, with the
    service day in words, big start times, a green line at now and a **Now**
-   or **Next** tag; the board opens at the run just gone. Tap the **8:00 AM**
-   run (T1): a popover asks **Start the 8:00 AM run?** with "Route 1 to North
-   on vehicle bus-1." Tap **Start trip**: the row shows a spinner, the other
-   rows dim, and Back is hidden until the server answers.
+   or **Next** tag; the board opens at the run just gone. Here, before you tap
+   a run, run Check 1c below, which carries on with Check 1 and leaves **Always
+   on** and **North up** chosen. Tap the **8:00 AM** run (T1): a popover asks
+   **Start the 8:00 AM run?** with "Route 1 to North on vehicle bus-1." Tap
+   **Start trip**: the row shows a spinner, the other rows dim, and Back is
+   hidden until the server answers.
 
 **Expected outcome:** the Tracking screen appears. The map fills the screen
 and shows the R1 shape drawn in the route colour (`0077C0`) with its three
@@ -250,8 +252,8 @@ GPS**, **From Stop ST1**, and the run's start time with `Bus 1`. The trip
 sheet at the bottom shows the route badge `1`, the headsign "North", the
 running time with **0 sent**, and **End trip**.
 
-Check 1c left **Always on** and **North up** chosen. Drive the route backwards,
-which turns the map round unless north is up:
+Check 1c, from the run screen, left **Always on** and **North up** chosen. Drive
+the route backwards, which turns the map round unless north is up:
 
 ```bash
 xcrun simctl location "$UDID" start --speed=8 --interval=1 \
@@ -362,12 +364,15 @@ OTHER_REFRESH=$(curl -s -X POST "$BASE/api/v1/auth/login" \
    Location Services off, the button there and at the top of **Settings** is
    **Try again**, as on **Before you start**. Go back. Under **During a trip**
    choose **Always on** and **North up**, and leave them for Check 1, which
-   puts them back. Go back. Tap **Theme**, then **Dark**: the app is dark at
-   once, with **Settings** still open. Put it back to **System**. Tap **Sign
-   out**: "Sign out?" with "The next driver can sign in on this phone." Tap
-   **Sign out** again: the sign-in screen appears with the server as one line,
-   **Server localhost:8081 Change**, the email empty, and the server log has
-   the logout:
+   puts them back. Go back. Tap **Privacy**: what is sent, who gets it
+   (`localhost`, and Apple Maps) and what stays on this phone, and no link to a
+   privacy policy, as `PRIVACY_POLICY_URL` is unset. Go back. Tap **Licenses**,
+   then **OneBusAway for iOS**: its license in full. Go back twice. Tap
+   **Theme**, then **Dark**: the app is dark at once, with **Settings** still
+   open. Put it back to **System**. Tap **Sign out**: "Sign out?" with "The
+   next driver can sign in on this phone." Tap **Sign out** again: the sign-in
+   screen appears with the server as one line, **Server localhost:8081
+   Change**, the email empty, and the server log has the logout:
 
    ```bash
    grep '"path":"/api/v1/auth/logout"' /tmp/vt-server.log

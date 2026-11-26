@@ -10590,6 +10590,12 @@
     "App" : {
       "comment" : "Settings: the heading over the rows about the app itself, such as its language."
     },
+    "Apple draws the map on Tracking. Reports never go to Apple." : {
+      "comment" : "Privacy, under 'Apple Maps'."
+    },
+    "Apple Maps" : {
+      "comment" : "Privacy, Who gets it: Apple's map service, by its own name."
+    },
     "As %@" : {
       "comment" : "Under the trip card when signing in again: the email the trip's driver signed in with, e.g. 'As jordan.lee@example.org'.",
       "localizations" : {
@@ -21329,6 +21335,9 @@
         }
       }
     },
+    "How full it is" : {
+      "comment" : "Privacy, What is sent: how full the vehicle is."
+    },
     "If reporting stops" : {
       "comment" : "Welcome, screen 3: heading over the card that shows what a stopped trip looks like.",
       "localizations" : {
@@ -23062,6 +23071,9 @@
         }
       }
     },
+    "Licenses" : {
+      "comment" : "Settings, About: the row, and the title of its page, with the app's code and each license it is under."
+    },
     "Light" : {
       "comment" : "Settings, a theme: the app is light whatever the phone is."
     },
@@ -24636,6 +24648,9 @@
     },
     "Map" : {
       "comment" : "During a trip: the heading over two choices, with a picture each, of what is at the top of the map."
+    },
+    "More" : {
+      "comment" : "Privacy: the heading over the agency's privacy policy link."
     },
     "Next %@ · %@" : {
       "comment" : "Status card line 2 while off schedule: the next stop's name, then its scheduled time in the agency's zone.",
@@ -29332,6 +29347,12 @@
         }
       }
     },
+    "Only during a trip" : {
+      "comment" : "Privacy, What is sent: the app takes positions only while a trip runs."
+    },
+    "Only if you say so on Tracking." : {
+      "comment" : "Privacy, under 'How full it is'."
+    },
     "Open OBA Vehicle Tracker on your iPhone to allow location." : {
       "comment" : "Refusal when the location prompt got no answer, usually because it never showed: the driver was never asked.",
       "localizations" : {
@@ -30023,6 +30044,9 @@
           }
         }
       }
+    },
+    "Opens in the browser" : {
+      "comment" : "Privacy, under 'Your agency's privacy policy'."
     },
     "Opens Settings" : {
       "comment" : "VoiceOver hint on a problem line, or on the Language row, that opens the app's page in Settings.",
@@ -30892,6 +30916,12 @@
         }
       }
     },
+    "Position, how accurate it is, speed, direction and time, with the vehicle and the run." : {
+      "comment" : "Privacy, under 'Where the vehicle is'."
+    },
+    "Positions from Start trip until End trip. Nothing from before or after." : {
+      "comment" : "Privacy, under 'Only during a trip'."
+    },
     "Precise location" : {
       "comment" : "Checklist row: precise rather than approximate location.",
       "localizations" : {
@@ -31416,6 +31446,9 @@
           }
         }
       }
+    },
+    "Privacy" : {
+      "comment" : "Settings, About: the row, and the title of its page, on what the app sends and keeps."
     },
     "Re-center" : {
       "comment" : "The button over the map, once the driver has dragged it away from the vehicle, that makes the map follow the vehicle again.",
@@ -35145,6 +35178,9 @@
         }
       }
     },
+    "Reports with no connection" : {
+      "comment" : "Privacy, What stays on this phone: the reports the app keeps until it can send them."
+    },
     "Resume" : {
       "comment" : "The button on the 'Location stopped' problem line that restarts location.",
       "localizations" : {
@@ -35838,7 +35874,7 @@
       }
     },
     "Riders" : {
-      "comment" : "Permission check: the last row, after all the things the app needs: whether riders can see the vehicle."
+      "comment" : "Permission check: the last row, after all the things the app needs: whether riders can see the vehicle.\nPrivacy, Who gets it."
     },
     "Riders can see you coming" : {
       "comment" : "Welcome, screen 1: title.",
@@ -40929,6 +40965,9 @@
           }
         }
       }
+    },
+    "Sent when there is a connection again. Any still here after a day are dropped." : {
+      "comment" : "Privacy, under 'Reports with no connection'."
     },
     "Server" : {
       "comment" : "Once the phone has signed in before, the one line naming the server it uses: this word, then the server, e.g. 'tracker.example.org'.",
@@ -50836,6 +50875,12 @@
         }
       }
     },
+    "The app uses no other libraries or fonts." : {
+      "comment" : "Licenses: under the list of the app's code and the code it took from OneBusAway for iOS."
+    },
+    "The email goes when you sign out. The server stays." : {
+      "comment" : "Privacy, under 'Your email and the server'."
+    },
     "The iPhone is finding its position." : {
       "comment" : "Help, under 'Waiting for GPS'.",
       "localizations" : {
@@ -52566,6 +52611,12 @@
         }
       }
     },
+    "The server you signed in to, %@." : {
+      "comment" : "Privacy, under 'Your agency': the server's address, e.g. 'The server you signed in to, metro.example.'"
+    },
+    "The server you signed in to." : {
+      "comment" : "Privacy, under 'Your agency', when there is no server to name."
+    },
     "The server's reply could not be read." : {
       "comment" : "Shown only where no screen has its own words for a reply the app could not read, such as a Wi-Fi sign-in page answering in place of the server.",
       "localizations" : {
@@ -53093,6 +53144,9 @@
     },
     "They can't see you yet." : {
       "comment" : "Permission check, under 'Riders', when something that stops a trip is missing."
+    },
+    "They see the vehicle, not you." : {
+      "comment" : "Privacy, under 'Riders'."
     },
     "They see your vehicle during a trip." : {
       "comment" : "Permission check, under 'Riders', when everything is allowed."
@@ -58517,6 +58571,12 @@
         }
       }
     },
+    "What is sent" : {
+      "comment" : "Privacy: the heading over what the app sends."
+    },
+    "What stays on this phone" : {
+      "comment" : "Privacy: the heading over what the app keeps on the iPhone."
+    },
     "What the app needs to report your vehicle." : {
       "comment" : "Under the title 'Permission check'."
     },
@@ -58865,6 +58925,12 @@
           }
         }
       }
+    },
+    "Where the vehicle is" : {
+      "comment" : "Privacy, What is sent."
+    },
+    "Who gets it" : {
+      "comment" : "Privacy: the heading over who gets what the app sends."
     },
     "With CarPlay. Reports start when you open the app." : {
       "comment" : "Help, under 'Open the app on iPhone': the line shows when a trip started from the car cannot report until the app is opened on the phone.",
@@ -59731,6 +59797,9 @@
         }
       }
     },
+    "Your agency" : {
+      "comment" : "Privacy, Who gets it."
+    },
     "Your agency sets the server on this phone." : {
       "comment" : "Title of the setup link alert when the agency's device management sets the server, so the link was not used.",
       "localizations" : {
@@ -59904,6 +59973,9 @@
         }
       }
     },
+    "Your agency's privacy policy" : {
+      "comment" : "Privacy, More: a link to the agency's own privacy policy, which opens in Safari."
+    },
     "Your agency's server setting is not a valid address, so type it here." : {
       "comment" : "Under the server field when the agency's device management set a server the app can't use.",
       "localizations" : {
@@ -60076,6 +60148,9 @@
           }
         }
       }
+    },
+    "Your email and the server" : {
+      "comment" : "Privacy, What stays on this phone."
     },
     "Your previous trip could not be ended yet. Check your connection and try again." : {
       "comment" : "Refusal when the end of a trip ended on this phone only could not be sent before the next start.",

@@ -6,7 +6,7 @@ private let groupCorner: CGFloat = 26
 /// Settings, opened from the account button on the pickers: whether this
 /// phone can report a trip, who is signed in and Sign out, what the app is
 /// allowed and does during a trip, its language and theme, Help, Share
-/// diagnostics and the build. Android's `SettingsScreen`.
+/// diagnostics, Privacy, Licenses and the build. Android's `SettingsScreen`.
 struct SettingsView: View {
     let access: any LocationAccess
     let openPermissionCheck: () -> Void
@@ -301,7 +301,7 @@ private struct ThemeSettingsRow: View {
     }
 }
 
-/// Help, Share diagnostics and the build.
+/// Help, Share diagnostics, Privacy, Licenses and the build.
 private struct AboutGroup: View {
     @Environment(TripSession.self) private var session
     /// The file being written for the share sheet.
@@ -323,6 +323,16 @@ private struct AboutGroup: View {
             .buttonStyle(SettingsRowStyle())
             .disabled(writing || shared != nil)
             .background(ShareSheet(file: $shared))
+            SettingsDivider()
+            NavigationLink(value: PickerRoute.privacy) {
+                SettingsRow(symbol: "hand.raised", title: PrivacyText.title, end: .opens)
+            }
+            .buttonStyle(SettingsRowStyle())
+            SettingsDivider()
+            NavigationLink(value: PickerRoute.licenses) {
+                SettingsRow(symbol: "doc.text", title: PrivacyText.licensesTitle, end: .opens)
+            }
+            .buttonStyle(SettingsRowStyle())
             SettingsDivider()
             SettingsRow(symbol: "info.circle", title: SettingsText.version, value: AccountText.versionNumber(Bundle.main.infoDictionary))
                 .accessibilityElement(children: .combine)
