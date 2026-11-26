@@ -16,6 +16,7 @@ import org.onebusaway.vehicletracker.ui.permissions.PermissionEvent.Cancel
 import org.onebusaway.vehicletracker.ui.permissions.PermissionEvent.ContinueApproximate
 import org.onebusaway.vehicletracker.ui.permissions.PermissionEvent.LocationAnswered
 import org.onebusaway.vehicletracker.ui.permissions.PermissionEvent.LocationServicesChecked
+import org.onebusaway.vehicletracker.ui.permissions.PermissionEvent.NoticeDeclined
 import org.onebusaway.vehicletracker.ui.permissions.PermissionEvent.NotificationsAnswered
 import org.onebusaway.vehicletracker.ui.permissions.PermissionEvent.SettingsClosed
 import org.onebusaway.vehicletracker.ui.permissions.PermissionEvent.Started
@@ -355,5 +356,70 @@ class PermissionStepsTest {
         assertFalse(everything.copy(background = false).hasEverything)
         assertFalse(everything.copy(notifications = false).hasEverything)
         assertFalse(everything.copy(batteryExempt = false).hasEverything)
+    }
+
+    // --- The location notice, which comes before Android asks for location ---
+
+    @Test fun `leaving the notice before location goes back to the checklist, asking nothing`() {
+        assertEquals(PermissionFlowState(), PermissionFlowState(REQUEST_LOCATION).next(NoticeDeclined, nothingYet))
+    }
+
+    @Test fun `leaving it before background location goes on, as a refusal does`() {
+        val noBackground = everything.copy(background = false, notifications = false)
+        assertEquals(REQUEST_NOTIFICATIONS, PermissionFlowState(REQUEST_BACKGROUND).next(NoticeDeclined, noBackground).step)
+    }
+
+    @Test fun `leaving it anywhere else changes nothing`() {
+        for (step in PermissionStep.entries - setOf(REQUEST_LOCATION, REQUEST_BACKGROUND)) {
+            assertEquals(PermissionFlowState(step), PermissionFlowState(step).next(NoticeDeclined, nothingYet))
+        }
+    }
+
+    @Test fun `the notice comes before Android is asked for location, until this phone agrees`() {
+        val controller = PermissionFlowController { nothingYet }
+        controller.start()
+        assertFalse("not before Continue", controller.showsNotice(agreed = false))
+        controller.onContinue()
+
+        assertTrue(controller.showsNotice(agreed = false))
+        assertFalse("agreed, Android is asked", controller.showsNotice(agreed = true))
+        assertFalse("unread, it neither asks nor shows yet", controller.showsNotice(agreed = null))
+
+        controller.declineNotice()
+        assertEquals(IDLE, controller.flow.step)
+        assertTrue("the checklist stays, with Continue", controller.visible && controller.canContinue)
+    }
+
+    @Test fun `approximate location asked again for precise waits on the notice too`() {
+        val controller = PermissionFlowController { nothingYet.copy(coarse = true) }
+        controller.start()
+        controller.onContinue()
+
+        assertTrue(controller.showsNotice(agreed = false))
+    }
+
+    // Android answers at once, with no prompt, so there is nothing for the notice to come before.
+    @Test fun `with precise location granted, a run does not wait on the notice`() {
+        val controller = PermissionFlowController { everything }
+        controller.start()
+
+        assertEquals(REQUEST_LOCATION, controller.flow.step)
+        assertFalse(controller.showsNotice(agreed = false))
+    }
+
+    // Location granted before the notice existed, by an older build or in Android's settings.
+    @Test fun `background location waits on the notice, and leaving it goes on without asking`() {
+        val phone = PhoneGrants(nothingYet.copy(fine = true, coarse = true))
+        val controller = PermissionFlowController { phone.now }
+        controller.start()
+        controller.onContinue()
+        controller.dispatch(fineAndCoarse)
+        assertEquals(REQUEST_BACKGROUND, controller.flow.step)
+
+        assertTrue(controller.showsNotice(agreed = false))
+        controller.declineNotice()
+
+        assertEquals(REQUEST_NOTIFICATIONS, controller.flow.step)
+        assertFalse(controller.showsNotice(agreed = false))
     }
 }

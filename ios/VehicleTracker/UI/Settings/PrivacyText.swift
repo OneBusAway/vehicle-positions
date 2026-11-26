@@ -100,7 +100,7 @@ nonisolated enum PrivacyText {
     }
 
     static var keptDetail: String {
-        String(localized: "Sent when there is a connection again. Any still here after a day are dropped.", comment: "Privacy, under 'Reports with no connection'.")
+        String(localized: "Sent when there is a connection again, while you're signed in. Any still here after a day are dropped.", comment: "Privacy, under 'Reports with no connection'.")
     }
 
     // MARK: More

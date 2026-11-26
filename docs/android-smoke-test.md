@@ -226,12 +226,18 @@ it on its own, before or after the rest.
    `8:00 AM` over `North` reads the same on a phone set to any timezone. Tap it:
    **Start the 8:00 AM run?** asks first, over the route, `North` and the
    vehicle. Tap **Start trip**.
-5. On a fresh install **Start trip** opens **Before you start**, a checklist of what
-   the app needs. Tap **Continue** and answer Android's prompts as they come:
-   location (precise, while using the app), the location settings page for
-   "Allow all the time", notifications (allow), the battery exemption (allow or
-   deny, either is fine). Each row turns **Allowed** or **Skipped** as its
-   answer comes in.
+5. On a fresh install **Start trip** opens **Before you start**, a checklist of
+   what the app needs. Tap **Continue**: before Android asks anything, **Your
+   location during a trip** covers the checklist, saying the app collects
+   location data during a trip "even when the app is closed or not in use", with
+   **Sent to 10.0.2.2:8081** among its facts. Tap **Not now** (or Back): the
+   checklist is back, and nothing was asked. Tap **Continue** again, then
+   **Agree**, and answer Android's prompts as they come: location (precise, while
+   using the app), the location settings page for "Allow all the time",
+   notifications (allow), the battery exemption (allow or deny, either is fine).
+   Each row turns **Allowed** or **Skipped** as its answer comes in. The notice
+   does not show again on this phone, not for the next trip, nor from
+   **Permission check**.
 
 **Expected outcome:** after the checklist completes and device
 location services are confirmed on, the app navigates to the Tracking screen

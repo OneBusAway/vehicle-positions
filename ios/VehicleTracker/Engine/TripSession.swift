@@ -855,6 +855,19 @@ final class TripSession {
         }
     }
 
+    /// Changes the driver's password. The server signs out every other phone
+    /// signed in as them, and this one stays signed in: its next request
+    /// refreshes the access token the change ended. A 401 is the caller's,
+    /// as for the pickers' loads (`handleIfUnauthorized`).
+    func changePassword(current: String, new: String) async throws {
+        do {
+            try await requireAPI().changePassword(current: current, new: new)
+        } catch {
+            log.error("could not change the password: \(String(describing: error), privacy: .public)")
+            throw error
+        }
+    }
+
     private func requireAPI() throws -> any TrackerAPI {
         guard let api else { throw TripSessionError.notSignedIn }
         return api

@@ -191,6 +191,20 @@ nonisolated struct AuthTokens: Sendable, Decodable, Equatable {
     }
 }
 
+/// `POST /api/v1/auth/password`. The refresh token is this phone's own: the
+/// server keeps it good while it ends every other sign-in of the driver.
+nonisolated struct ChangePasswordRequest: Sendable, Encodable {
+    var currentPassword: String
+    var newPassword: String
+    var refreshToken: String
+
+    private enum CodingKeys: String, CodingKey {
+        case currentPassword = "current_password"
+        case newPassword = "new_password"
+        case refreshToken = "refresh_token"
+    }
+}
+
 nonisolated struct RefreshRequest: Sendable, Encodable {
     var refreshToken: String
 
@@ -231,11 +245,6 @@ nonisolated struct ErrorBody: Sendable, Decodable {
     var error: String
 }
 
-/// Why a request failed. The screens say each failure in their own sentence
-/// (`SignInForm`, `PickerLoad`, `StartRefusal`); the description is the
-/// app's words for any other place, in the driver's language. It never
-/// carries the server's `error` message, which is written for the API and in
-/// English, nor the system's or Swift's.
 /// What the agency sets for its drivers (`GET /api/v1/agency`). The privacy
 /// policy link is nil when it has none.
 nonisolated struct AgencyInfo: Sendable, Decodable, Equatable {
@@ -246,6 +255,11 @@ nonisolated struct AgencyInfo: Sendable, Decodable, Equatable {
     }
 }
 
+/// Why a request failed. The screens say each failure in their own sentence
+/// (`SignInForm`, `PickerLoad`, `StartRefusal`); the description is the
+/// app's words for any other place, in the driver's language. It never
+/// carries the server's `error` message, which is written for the API and in
+/// English, nor the system's or Swift's.
 nonisolated enum APIError: Error, Equatable, LocalizedError {
     /// The base URL fails ``ServerURLPolicy``.
     case insecureURL

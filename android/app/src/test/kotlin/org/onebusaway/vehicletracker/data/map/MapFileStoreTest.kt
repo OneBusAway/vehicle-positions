@@ -67,6 +67,16 @@ class MapFileStoreTest {
         assertEquals(MapRecord(), MapFileStore(dir).load())
     }
 
+    // Read as empty, it would lose which servers' maps were deleted, and the next save would too.
+    @Test fun `a record that can't be read throws rather than reading as empty`() = runTest {
+        val dir = tempFolder.newFolder()
+        File(dir, "map.json").mkdir()
+
+        val failure = runCatching { MapFileStore(dir).load() }.exceptionOrNull()
+
+        assertTrue("expected an IOException, was $failure", failure is IOException)
+    }
+
     @Test fun `a save that fails leaves the record before it intact`() = runTest {
         val dir = tempFolder.newFolder()
         val store = MapFileStore(dir)

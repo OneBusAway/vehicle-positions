@@ -62,6 +62,8 @@ import org.onebusaway.vehicletracker.ui.permissions.PermissionFixes
 import org.onebusaway.vehicletracker.ui.permissions.PermissionRow
 import org.onebusaway.vehicletracker.ui.permissions.crossFade
 import org.onebusaway.vehicletracker.ui.permissions.fixOf
+import org.onebusaway.vehicletracker.ui.permissions.LocationNoticeHost
+import org.onebusaway.vehicletracker.ui.permissions.rememberLocationNotice
 import org.onebusaway.vehicletracker.ui.permissions.rememberPermissionFixes
 import org.onebusaway.vehicletracker.ui.permissions.rememberRowTick
 import org.onebusaway.vehicletracker.ui.permissions.textOf
@@ -89,8 +91,12 @@ private val HomeHeight = 44.dp
 @Composable
 fun PermissionCheckScreen(onBack: () -> Unit) {
     val access = rememberPhoneAccess()
-    val fixes = rememberPermissionFixes(onAnswer = access::refresh)
-    PermissionCheckContent(readiness(access.value, waiting = null), fixes, onBack)
+    val notice = rememberLocationNotice()
+    val fixes = rememberPermissionFixes(onAnswer = access::refresh, notice = notice)
+    // A location row's Allow, before Android asks.
+    LocationNoticeHost(fixes.noticeFor != null, notice.server, onAgree = fixes::agreeToNotice, onNotNow = fixes::declineNotice) {
+        PermissionCheckContent(readiness(access.value, waiting = null), fixes, onBack)
+    }
 }
 
 @Composable

@@ -13,9 +13,15 @@ sealed interface MapFileState {
 
     /**
      * [update] is a newer copy on its way, while maps keep [file]. [againFailed] is why the new copy the driver asked for
-     * did not come, while maps keep this one; a check the app makes by itself never sets it.
+     * did not come, while maps keep this one; a check the app makes by itself never sets it. [deleteFailed] is a delete
+     * the driver asked for that could not be saved, so the map is still here.
      */
-    data class Ready(val file: File, val update: Downloading? = null, val againFailed: Failed? = null) : MapFileState
+    data class Ready(
+        val file: File,
+        val update: Downloading? = null,
+        val againFailed: Failed? = null,
+        val deleteFailed: Boolean = false,
+    ) : MapFileState
 
     /**
      * The first copy could not be fetched. When the app tries again depends on [reason]. [size] is the file's, in bytes,
@@ -43,7 +49,7 @@ enum class MapFailure {
      */
     CLEARTEXT_BLOCKED,
 
-    /** Anything else, such as `map.json` failing to save. It is logged, and the next refresh tries again. */
+    /** Anything else, such as `map.json` failing to be read or saved. It is logged, and the next refresh tries again. */
     UNEXPECTED,
 }
 

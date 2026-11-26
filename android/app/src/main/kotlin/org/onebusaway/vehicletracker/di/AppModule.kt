@@ -22,6 +22,7 @@ import kotlinx.coroutines.runBlocking
 import org.onebusaway.vehicletracker.R
 import org.onebusaway.vehicletracker.data.AppLog
 import org.onebusaway.vehicletracker.data.DataStoreDriverFlagsStore
+import org.onebusaway.vehicletracker.data.DataStoreLocationNoticeStore
 import org.onebusaway.vehicletracker.data.DataStoreTripSettingsStore
 import org.onebusaway.vehicletracker.data.DataStoreTripStateStore
 import org.onebusaway.vehicletracker.data.DataStoreVehiclePrefsStore
@@ -30,6 +31,7 @@ import org.onebusaway.vehicletracker.data.EncryptedSessionStore
 import org.onebusaway.vehicletracker.data.FileOfflineFixQueue
 import org.onebusaway.vehicletracker.data.FileTripGeometryStore
 import org.onebusaway.vehicletracker.data.KeystoreCryptor
+import org.onebusaway.vehicletracker.data.LocationNoticeStore
 import org.onebusaway.vehicletracker.data.ManagedServerSource
 import org.onebusaway.vehicletracker.data.OfflineFixQueue
 import org.onebusaway.vehicletracker.data.PrivacyPolicySource
@@ -47,6 +49,7 @@ import org.onebusaway.vehicletracker.data.api.TrackerApi
 import org.onebusaway.vehicletracker.data.api.TrackerApiProvider
 import org.onebusaway.vehicletracker.data.driverFlagsDataStore
 import org.onebusaway.vehicletracker.data.isDebuggable
+import org.onebusaway.vehicletracker.data.locationNoticeDataStore
 import org.onebusaway.vehicletracker.data.map.MapFileDownloader
 import org.onebusaway.vehicletracker.data.map.MapFileFetcher
 import org.onebusaway.vehicletracker.data.map.MapFileSource
@@ -236,6 +239,11 @@ object AppModule {
     @Singleton
     fun provideTripSettingsStore(@ApplicationContext context: Context): TripSettingsStore =
         DataStoreTripSettingsStore(context.tripSettingsDataStore)
+
+    @Provides
+    @Singleton
+    fun provideLocationNoticeStore(@ApplicationContext context: Context): LocationNoticeStore =
+        DataStoreLocationNoticeStore(context.locationNoticeDataStore)
 
     @Provides
     @Singleton

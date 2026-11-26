@@ -45,6 +45,7 @@ import org.onebusaway.vehicletracker.R
 import org.onebusaway.vehicletracker.data.AuthRepository
 import org.onebusaway.vehicletracker.data.CatalogRepository
 import org.onebusaway.vehicletracker.data.DataStoreDriverFlagsStore
+import org.onebusaway.vehicletracker.data.DataStoreLocationNoticeStore
 import org.onebusaway.vehicletracker.data.DataStoreTripStateStore
 import org.onebusaway.vehicletracker.data.DataStoreVehiclePrefsStore
 import org.onebusaway.vehicletracker.data.DriverFlag
@@ -58,11 +59,13 @@ import org.onebusaway.vehicletracker.data.TripRepository
 import org.onebusaway.vehicletracker.data.api.ApiFactory
 import org.onebusaway.vehicletracker.data.api.TrackerApiProvider
 import org.onebusaway.vehicletracker.data.driverFlagsDataStore
+import org.onebusaway.vehicletracker.data.locationNoticeDataStore
 import org.onebusaway.vehicletracker.data.sessionDataStore
 import org.onebusaway.vehicletracker.data.tripStateDataStore
 import org.onebusaway.vehicletracker.data.vehiclePrefsDataStore
 import org.onebusaway.vehicletracker.service.BacklogUploadScheduler
 import org.onebusaway.vehicletracker.service.ServiceController
+import org.onebusaway.vehicletracker.ui.permissions.LocationNoticeViewModel
 import org.onebusaway.vehicletracker.ui.runs.BoardRun
 import org.onebusaway.vehicletracker.ui.runs.RunLabel
 import org.onebusaway.vehicletracker.ui.runs.RunsScreen
@@ -171,6 +174,7 @@ class RunStartConfirmTest {
     }
     private lateinit var runs: RunsViewModel
     private lateinit var tip: RunBoardTipViewModel
+    private lateinit var notice: LocationNoticeViewModel
 
     @Before fun setUp() = runBlocking {
         forgetAll()
@@ -181,10 +185,12 @@ class RunStartConfirmTest {
                 RunsViewModel(SavedStateHandle(arguments), CatalogRepository(api), tripRepository, FileTripGeometryStore(geometryFile), noReports, auth, clock)
             }
             initializer { RunBoardTipViewModel(DriverTips(sessions, flags, scope)) }
+            initializer { LocationNoticeViewModel(sessions, DataStoreLocationNoticeStore(context.locationNoticeDataStore)) }
         }
         val provider = ViewModelProvider.create(owner, factory)
         runs = provider[RunsViewModel::class]
         tip = provider[RunBoardTipViewModel::class]
+        notice = provider[LocationNoticeViewModel::class]
     }
 
     @After fun tearDown() = runBlocking {
@@ -199,6 +205,7 @@ class RunStartConfirmTest {
         context.tripStateDataStore.edit { it.clear() }
         context.vehiclePrefsDataStore.edit { it.clear() }
         context.driverFlagsDataStore.edit { it.clear() }
+        context.locationNoticeDataStore.edit { it.clear() }
         geometryFile.delete()
         queueFile.delete()
     }
@@ -224,6 +231,7 @@ class RunStartConfirmTest {
                         onSessionEnded = {},
                         viewModel = runs,
                         tipViewModel = tip,
+                        noticeViewModel = notice,
                     )
                 }
             }

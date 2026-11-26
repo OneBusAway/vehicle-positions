@@ -85,6 +85,10 @@ nonisolated enum SettingsText {
         }
     }
 
+    static var accountSection: String {
+        String(localized: "Account", comment: "Settings: the heading over the rows about the driver's account, such as Change password.")
+    }
+
     static var aboutSection: String {
         String(localized: "About", comment: "Settings: the heading over Help, Share diagnostics and the app's version.")
     }

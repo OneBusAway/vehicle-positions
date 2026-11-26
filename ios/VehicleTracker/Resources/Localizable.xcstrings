@@ -8431,6 +8431,9 @@
         }
       }
     },
+    "Account" : {
+      "comment" : "Settings: the heading over the rows about the driver's account, such as Change password."
+    },
     "Add %@ to favorites" : {
       "comment" : "VoiceOver label of the star on a vehicle tile that is not yet a favourite: the fleet number, e.g. 'Add 4317 to favorites'.",
       "localizations" : {
@@ -11288,6 +11291,9 @@
         }
       }
     },
+    "At least 8 characters" : {
+      "comment" : "Change password: under the new password fields, what a password needs."
+    },
     "Away from the route on the map." : {
       "comment" : "Help, under 'Off route'.",
       "localizations" : {
@@ -12326,6 +12332,9 @@
         }
       }
     },
+    "Can't reach %@. Check your connection." : {
+      "comment" : "Change password: banner when nothing answered. The server's address as the driver knows it, e.g. 'tracker.example.org'."
+    },
     "Can't reach the server. Check your connection." : {
       "comment" : "Banner when a start could not reach the server.",
       "localizations" : {
@@ -12845,6 +12854,9 @@
         }
       }
     },
+    "Change password" : {
+      "comment" : "Settings, Account: the row, the title of its page and the button at its foot, which changes the driver's password."
+    },
     "Change vehicle" : {
       "comment" : "Banner button that goes back to the vehicle screen after a start was refused for the vehicle.",
       "localizations" : {
@@ -13017,6 +13029,9 @@
           }
         }
       }
+    },
+    "Changing password" : {
+      "comment" : "Change password: the button while the change is with the server, beside a spinner."
     },
     "Check again" : {
       "comment" : "Button that loads a picker's list again when it came back empty.",
@@ -15101,6 +15116,9 @@
         }
       }
     },
+    "Couldn't change your password. Try again." : {
+      "comment" : "Change password: banner when the server answered with an error the driver can do nothing about but try again."
+    },
     "Couldn't load the routes" : {
       "comment" : "Empty state title when the route list could not be loaded.",
       "localizations" : {
@@ -15965,6 +15983,9 @@
           }
         }
       }
+    },
+    "Current password" : {
+      "comment" : "Change password: the field for the password the driver signs in with now."
     },
     "Dark" : {
       "comment" : "Settings, a theme: the app is dark whatever the phone is."
@@ -24652,6 +24673,12 @@
     "More" : {
       "comment" : "Privacy: the heading over the agency's privacy policy link."
     },
+    "New password" : {
+      "comment" : "Change password: the field for the password to sign in with from now on."
+    },
+    "New password again" : {
+      "comment" : "Change password: the field where the new password is typed a second time, to catch a slip."
+    },
     "Next %@ · %@" : {
       "comment" : "Status card line 2 while off schedule: the next stop's name, then its scheduled time in the agency's zone.",
       "localizations" : {
@@ -30221,6 +30248,12 @@
         }
       }
     },
+    "Other phones signed in as you are signed out. This one stays signed in." : {
+      "comment" : "Change password: under the fields, what a change does to the driver's other sign-ins."
+    },
+    "Other phones were signed out." : {
+      "comment" : "Settings: the alert after the driver's password was changed: the other phones signed in as them were signed out."
+    },
     "Password" : {
       "comment" : "Label of the sign-in screen's password field.",
       "localizations" : {
@@ -30393,6 +30426,9 @@
           }
         }
       }
+    },
+    "Password changed" : {
+      "comment" : "Settings: the title of the alert after the driver's password was changed."
     },
     "Permission check" : {
       "comment" : "The title of a page opened from Settings, with each thing the app needs, as on Before you start, and what fixes one that is missing. It names its row in Settings too, and is the VoiceOver hint on the top of Settings, which opens it."
@@ -40966,7 +41002,7 @@
         }
       }
     },
-    "Sent when there is a connection again. Any still here after a day are dropped." : {
+    "Sent when there is a connection again, while you're signed in. Any still here after a day are dropped." : {
       "comment" : "Privacy, under 'Reports with no connection'."
     },
     "Server" : {
@@ -50526,6 +50562,9 @@
         }
       }
     },
+    "That's not your current password." : {
+      "comment" : "Change password: under Current password, when the server turned it down."
+    },
     "The app asks for location when you start a trip." : {
       "comment" : "Settings, under 'Not ready to report', when the app has not asked for location yet."
     },
@@ -52789,6 +52828,9 @@
           }
         }
       }
+    },
+    "The two new passwords don't match." : {
+      "comment" : "Change password: under New password again, when it is not the same as New password."
     },
     "The way you drive" : {
       "comment" : "During a trip, under 'Map': the map turns so that the way the vehicle goes is at the top."
@@ -55930,6 +55972,12 @@
           }
         }
       }
+    },
+    "Use a shorter password." : {
+      "comment" : "Change password: under New password, when it is longer than the server takes (72 bytes)."
+    },
+    "Use at least 8 characters." : {
+      "comment" : "Change password: under New password, when it is shorter than 8 characters."
     },
     "Use iPhone to see more" : {
       "comment" : "CarPlay: the last row of a list the car cut short; the rest of the list is on the phone.",
@@ -59975,6 +60023,9 @@
     },
     "Your agency's privacy policy" : {
       "comment" : "Privacy, More: a link to the agency's own privacy policy, which opens in Safari."
+    },
+    "Your agency's server can't change passwords yet." : {
+      "comment" : "Change password: banner when the server is a version from before drivers could change their password."
     },
     "Your agency's server setting is not a valid address, so type it here." : {
       "comment" : "Under the server field when the agency's device management set a server the app can't use.",

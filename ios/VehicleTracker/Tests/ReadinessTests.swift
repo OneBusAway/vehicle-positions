@@ -74,7 +74,12 @@ import Testing
     /// Where Before you start can only be put right in one way, so can the
     /// header and Permission check, under the same words: Try again reads
     /// Location Services again, as the app's page in Settings can't turn them
-    /// on.
+    /// on. Precise location is left out on purpose. Before you start's Try
+    /// again asks iOS for precise location for the trip about to start, a
+    /// grant that lasts while that trip's location indicator is up. Settings
+    /// starts no trip, so a grant from there would be gone by the next one,
+    /// and the header and Permission check offer the app's page in Settings,
+    /// where it stays on.
     @Test func whatPutsItRightIsBeforeYouStarts() throws {
         for (access, row, words) in [(LocationAccessState.denied, LocationChecklist.Row.location, "Open Settings"),
                                      (.servicesOff, .locationServices, "Try again")] {

@@ -359,8 +359,9 @@ OTHER_REFRESH=$(curl -s -X POST "$BASE/api/v1/auth/login" \
    report** with it off ("Precise location is off for this app."). Then come
    `driver@example.com` and `localhost` beside **Sign out**. At the end is
    **Version** with the app's version. Tap the top of the page, or **Permission
-   check**: each thing the app needs is there in order, with **Allowed** or, on
-   the one that stops a trip, a button that fixes it, and no trip starts. With
+   check**: each thing the app needs is there in order, and no trip starts.
+   Each one allowed says **Allowed**, the one that stops a trip has a button
+   that fixes it, and those after it, not reached yet, show neither. With
    Location Services off, the button there and at the top of **Settings** is
    **Try again**, as on **Before you start**. Go back. Under **During a trip**
    choose **Always on** and **North up**, and leave them for Check 1, which
@@ -773,6 +774,52 @@ loaded, so **Change vehicle** loads them again. Back does not.
 
    **Expected outcome:** with its one vehicle back, the app goes straight on
    to **Choose a route**, as a fresh sign-in does.
+
+### Check 6c: Change password
+
+Changing the password signs out every other phone signed in as the driver,
+and this one stays signed in. Sign in once more with curl, as the other phone:
+
+```bash
+OTHER_REFRESH=$(curl -s -X POST "$BASE/api/v1/auth/login" \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"driver@example.com","password":"driverpass123"}' \
+  | python3 -c 'import sys,json;print(json.load(sys.stdin)["refresh_token"])')
+```
+
+1. Open **Settings** from the account button and tap **Change password**,
+   under **Account**.
+
+   **Expected outcome:** three password fields, each with an eye, under
+   "At least 8 characters" and "Other phones signed in as you are signed
+   out. This one stays signed in." **Change password** at the foot is grey
+   until all three hold something.
+
+2. Type `wrong-pass` as the current password, `newpass123` twice, and tap
+   **Change password**.
+
+   **Expected outcome:** "That's not your current password." under the first
+   field. Type `driverpass123` there instead, `short` and `shorter` in the
+   other two, and tap again: "Use at least 8 characters." and "The two new
+   passwords don't match." under them, and nothing is sent.
+
+3. Type `newpass123` in both new fields and tap **Change password**.
+
+   **Expected outcome:** **Changing password** with a spinner while it is
+   out, and no Back. Then the page goes back to **Settings**, with an alert:
+   **Password changed**, "Other phones were signed out." The other phone is
+   signed out, and this one is not: open **Privacy**, and the server log
+   shows a `401` on `/api/v1/agency`, then a refresh and the same request
+   again with `200`.
+
+   ```bash
+   curl -s -o /dev/null -w '%{http_code}\n' -X POST "$BASE/api/v1/auth/refresh" \
+     -H 'Content-Type: application/json' -d "{\"refresh_token\":\"$OTHER_REFRESH\"}"
+   # 401
+   ```
+
+4. Put the password back for the other checks: change it again from
+   `newpass123` to `driverpass123`.
 
 ## CarPlay
 
