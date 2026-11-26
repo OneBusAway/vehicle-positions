@@ -70,7 +70,10 @@ import org.onebusaway.vehicletracker.ui.components.EmptyState
 import org.onebusaway.vehicletracker.ui.components.ScrolledUnderDivider
 import org.onebusaway.vehicletracker.ui.components.SetupHeader
 import org.onebusaway.vehicletracker.ui.isolated
+import org.onebusaway.vehicletracker.ui.permissions.LocationNoticeHost
+import org.onebusaway.vehicletracker.ui.permissions.LocationNoticeViewModel
 import org.onebusaway.vehicletracker.ui.permissions.PreflightContent
+import org.onebusaway.vehicletracker.ui.permissions.rememberLocationNotice
 import org.onebusaway.vehicletracker.ui.permissions.rememberPermissionFlow
 import org.onebusaway.vehicletracker.ui.routes.RouteBadgeModel
 import org.onebusaway.vehicletracker.ui.theme.AppMotion
@@ -104,6 +107,7 @@ fun RunsScreen(
     onSessionEnded: () -> Unit,
     viewModel: RunsViewModel = hiltViewModel(),
     tipViewModel: RunBoardTipViewModel = hiltViewModel(),
+    noticeViewModel: LocationNoticeViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val locale = LocalLocale.current.platformLocale
@@ -127,8 +131,10 @@ fun RunsScreen(
     // The permission sequence has no argument to carry the confirmed run through, so the run waits
     // here until it comes back ready. Try again on a refused start reuses it without asking again.
     var pendingRunId by rememberSaveable { mutableStateOf<String?>(null) }
+    val notice = rememberLocationNotice(noticeViewModel)
     val permissionFlow = rememberPermissionFlow(
         onReady = { pendingRunId?.let(viewModel::onStartRun) },
+        noticeAgreed = notice.agreed,
     )
     BackHandler(enabled = permissionFlow.visible) { permissionFlow.cancel() }
     // Its state is kept here, and only the tip reads it, so the board under it is never recomposed for it.
@@ -185,6 +191,13 @@ fun RunsScreen(
                 onRowAction = permissionFlow::onRowAction,
             )
         }
+        // Over the checklist, before Android asks for location.
+        LocationNoticeHost(
+            visible = permissionFlow.showsNotice(notice.agreed),
+            server = notice.server,
+            onAgree = notice.agree,
+            onNotNow = permissionFlow::declineNotice,
+        )
         TipHost(
             tip = runTip,
             title = stringResource(R.string.tip_run_board_title),

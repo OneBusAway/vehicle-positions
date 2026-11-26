@@ -203,6 +203,23 @@
     <string name="theme_system_detail">Same as the phone</string>
     <string name="theme_light">Light</string>
     <string name="theme_dark">Dark</string>
+    <!-- The location notice: a full page before Android first asks for location, which Google Play requires. It must say that the app collects location data, what for, and that it does so even when the app is closed or not in use. -->
+    <string name="location_notice_title">Your location during a trip</string>
+    <!-- The notice's main sentence. The app's name, e.g. "Vehicle Tracker collects location data to show your vehicle to riders during a trip, even when the app is closed or not in use." Keep "even when the app is closed or not in use": Google Play requires those words. -->
+    <string name="location_notice_text">%1$s collects location data to show your vehicle to riders during a trip, even when the app is closed or not in use.</string>
+    <!-- The notice's three facts, each a line with a smaller line under it: when, what, and to whom. -->
+    <string name="location_notice_when">Only during a trip</string>
+    <string name="location_notice_when_detail">From Start trip until End trip</string>
+    <string name="location_notice_what">Position, speed and direction</string>
+    <string name="location_notice_what_detail">With how accurate it is, the time, the vehicle and the run</string>
+    <!-- The server the driver signed in to, as they know it, e.g. "Sent to metro.example". -->
+    <string name="location_notice_to">Sent to %1$s</string>
+    <!-- In place of "Sent to metro.example" when the phone can't tell the server. -->
+    <string name="location_notice_to_agency">Sent to your agency</string>
+    <string name="location_notice_to_detail">Your agency\'s server</string>
+    <!-- The notice's buttons. Agree is the only way to agree; Not now asks for nothing, and the notice shows again next time. -->
+    <string name="location_notice_agree">Agree</string>
+    <string name="location_notice_not_now">Not now</string>
     <!-- Permission check, opened from Settings: a page with each thing the app needs, as on Before you start, and what fixes one that is missing. The same words name its row in Settings, and what a tap on the top of Settings does for TalkBack. -->
     <string name="permission_check_title">Permission check</string>
     <string name="permission_check_intro">What the app needs to report your vehicle.</string>
