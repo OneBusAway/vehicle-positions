@@ -34,6 +34,9 @@ import Foundation
     nonisolated(unsafe) var whileUploadingHistory: (() async throws -> Void)?
     nonisolated(unsafe) var agencyInfo = AgencyInfo(privacyPolicyURL: nil)
     nonisolated(unsafe) var agencyError: (any Error)?
+    nonisolated(unsafe) var passwordError: (any Error)?
+    /// The current and new password of each change asked for.
+    private(set) nonisolated(unsafe) var passwordChanges: [(String, String)] = []
 
     private(set) nonisolated(unsafe) var logins: [(String, String)] = []
     private(set) nonisolated(unsafe) var tripRequests: [String] = []
@@ -85,6 +88,10 @@ import Foundation
     func agency() async throws -> AgencyInfo {
         if let agencyError { throw agencyError }
         return agencyInfo
+    }
+    func changePassword(current: String, new: String) async throws {
+        passwordChanges.append((current, new))
+        if let passwordError { throw passwordError }
     }
 
     func postLocationHistory(_ request: LocationHistoryRequest) async throws {

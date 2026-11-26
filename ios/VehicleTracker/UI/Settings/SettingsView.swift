@@ -52,6 +52,12 @@ struct SettingsView: View {
                         SettingsDivider()
                         ThemeSettingsRow()
                     }
+                    SettingsGroup(title: SettingsText.accountSection) {
+                        NavigationLink(value: PickerRoute.changePassword) {
+                            SettingsRow(symbol: "key", title: ChangePasswordText.title, end: .opens)
+                        }
+                        .buttonStyle(SettingsRowStyle())
+                    }
                     AboutGroup()
                 }
                 .padding(EdgeInsets(top: 30, leading: 16, bottom: 32, trailing: 16))

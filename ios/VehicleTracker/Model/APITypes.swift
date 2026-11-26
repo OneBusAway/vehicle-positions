@@ -191,6 +191,20 @@ nonisolated struct AuthTokens: Sendable, Decodable, Equatable {
     }
 }
 
+/// `POST /api/v1/auth/password`. The refresh token is this phone's own: the
+/// server keeps it good while it ends every other sign-in of the driver.
+nonisolated struct ChangePasswordRequest: Sendable, Encodable {
+    var currentPassword: String
+    var newPassword: String
+    var refreshToken: String
+
+    private enum CodingKeys: String, CodingKey {
+        case currentPassword = "current_password"
+        case newPassword = "new_password"
+        case refreshToken = "refresh_token"
+    }
+}
+
 nonisolated struct RefreshRequest: Sendable, Encodable {
     var refreshToken: String
 
