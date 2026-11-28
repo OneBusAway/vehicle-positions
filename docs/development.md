@@ -157,6 +157,15 @@ on every page. In a script, `VT.icon(name)` gives an icon's address.
 a template or script, and a new file under `web/static` needs a line in
 `TestStaticAssets_FileBudgets`.
 
+Chrome and Edge fetch an admin page while the pointer rests on its link, from
+a rule the shell's script puts in the page, so a `GET` under `/admin/` can
+arrive before anyone has asked for the page, marked `Sec-Purpose: prefetch`.
+A page must be safe to fetch that way: it changes nothing, and anything
+meant to be seen once, like the message after a form, is left for the visit
+that is shown (`fetchedAhead` in `admin_session.go`). A download under
+`/admin/` is not a page, and the rule has to leave it out:
+`TestShell_FetchesPagesAheadButNotDownloads` fails on a new one until it does.
+
 Running behind a reverse proxy locally (rare, but if you're testing that
 path)? Set `TRUST_PROXY_HEADERS=true` so client-IP-based rate limiting and
 the session cookie's `Secure` flag look at `X-Forwarded-For` /

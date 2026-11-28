@@ -221,6 +221,23 @@
     });
   });
 
+  /* A page is fetched while the pointer rests on its link, so the click finds it there (Chrome and Edge;
+     other browsers load it at the click, as before). Chrome would keep that copy for five minutes, and a page
+     here shows what was true when it was fetched, so every ten seconds the rule comes out, which drops a copy
+     not yet used, and goes back in a moment later: put back at once, Chrome never sees it gone and keeps the
+     copy. The CSV template is a download, not a page. */
+  if (HTMLScriptElement.supports && HTMLScriptElement.supports("speculationrules")) {
+    var ahead = null;
+    var fetchAhead = function () {
+      ahead = document.createElement("script");
+      ahead.type = "speculationrules";
+      ahead.textContent = '{"prefetch":[{"where":{"and":[{"href_matches":"/admin/*"},{"not":{"href_matches":"/admin/*.csv"}}]},"eagerness":"moderate"}]}';
+      document.head.appendChild(ahead);
+    };
+    fetchAhead();
+    setInterval(function () { ahead.remove(); setTimeout(fetchAhead, 100); }, 10000);
+  }
+
   /* Search: jump to a page, route, vehicle, driver or trip. "/" or Ctrl K opens it. Pages come from the
      menu, routes from the schedule (asked for once), the rest from the list endpoints as the term is typed. */
   var pal = $("#palette"), q = $("#palette-q"), list = $("#palette-list"), shown = [], found = [], sel = 0, routes = null, asked = 0, timer = 0;
