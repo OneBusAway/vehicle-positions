@@ -203,5 +203,6 @@ class TrackingNotification(private val context: Context) {
         TrackingProblem.CLOCK_SKEW -> context.getString(R.string.tracking_problem_clock_skew)
         TrackingProblem.AUTH_EXPIRED -> context.getString(R.string.tracking_notification_signed_out)
         TrackingProblem.REPORTS_REFUSED -> context.getString(R.string.tracking_notification_reports_refused)
+        TrackingProblem.SERVER_ERROR -> context.getString(R.string.tracking_notification_server_error)
     }
 }

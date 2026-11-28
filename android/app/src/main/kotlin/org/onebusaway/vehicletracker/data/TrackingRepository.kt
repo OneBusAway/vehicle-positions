@@ -12,9 +12,11 @@ import javax.inject.Singleton
 /**
  * What is keeping the trip's reports from riders, if anything. [REPORTS_REFUSED] is the server
  * turning reports down (403/409): the vehicle was deactivated or unassigned, or the trip is no
- * longer active on the server. The driver cannot fix that from the phone; dispatch can.
+ * longer active on the server. The driver cannot fix that from the phone; dispatch can. [SERVER_ERROR] is the server
+ * failing, or turning reports down for a reason the driver cannot fix (a 5xx, or a 4xx nothing else here covers):
+ * the phone is online and the reports are not in the feed.
  */
-enum class TrackingProblem { NONE, NO_NETWORK, NO_GPS, AUTH_EXPIRED, CLOCK_SKEW, REPORTS_REFUSED }
+enum class TrackingProblem { NONE, NO_NETWORK, NO_GPS, AUTH_EXPIRED, CLOCK_SKEW, REPORTS_REFUSED, SERVER_ERROR }
 
 data class TrackingState(
     val active: Boolean = false,

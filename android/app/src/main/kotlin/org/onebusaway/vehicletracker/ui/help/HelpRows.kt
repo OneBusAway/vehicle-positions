@@ -77,6 +77,7 @@ internal enum class ProblemHelp(@StringRes val title: Int, @StringRes val meanin
     NO_GPS(R.string.tracking_problem_no_gps, R.string.help_problem_no_gps, R.drawable.ic_location_disabled),
     CLOCK_WRONG(R.string.tracking_problem_clock_skew, R.string.help_problem_clock_skew, R.drawable.ic_schedule),
     REPORTS_REFUSED(R.string.tracking_problem_reports_refused, R.string.help_problem_reports_refused, R.drawable.ic_no_transfer),
+    SERVER_ERROR(R.string.tracking_problem_server_error, R.string.help_problem_server_error, R.drawable.ic_sync_problem),
     SIGNED_OUT(R.string.tracking_signed_out_title, R.string.help_problem_signed_out, R.drawable.ic_lock),
 
     /** The notification posted when reports stop until the app is opened. It has no line under the card. */
@@ -107,6 +108,7 @@ internal fun problemHelp(problem: TrackingProblem): ProblemHelp? = when (problem
     TrackingProblem.NO_GPS -> ProblemHelp.NO_GPS
     TrackingProblem.CLOCK_SKEW -> ProblemHelp.CLOCK_WRONG
     TrackingProblem.REPORTS_REFUSED -> ProblemHelp.REPORTS_REFUSED
+    TrackingProblem.SERVER_ERROR -> ProblemHelp.SERVER_ERROR
     TrackingProblem.AUTH_EXPIRED -> ProblemHelp.SIGNED_OUT
 }
 

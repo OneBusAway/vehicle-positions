@@ -155,6 +155,7 @@
     <string name="help_problem_no_gps">Riders see your last position until it comes back.</string>
     <string name="help_problem_clock_skew">Turn on automatic time in the phone\'s settings.</string>
     <string name="help_problem_reports_refused">The server is not taking this vehicle\'s reports. Ask your dispatcher.</string>
+    <string name="help_problem_server_error">The server is failing or turning your reports down. Nothing you can fix. Keep driving.</string>
     <string name="help_problem_signed_out">Reports have stopped. Sign in to go on. Your trip is still open.</string>
     <string name="help_problem_reports_paused">A notification. Open the app to keep reporting.</string>
 
@@ -567,6 +568,8 @@
     <string name="tracking_problem_clock_skew_detail">Set automatic time</string>
     <string name="tracking_problem_reports_refused">Reports refused</string>
     <string name="tracking_problem_reports_refused_detail">Ask your dispatcher</string>
+    <string name="tracking_problem_server_error">Server error</string>
+    <string name="tracking_problem_server_error_detail">Riders can\'t see you</string>
     <!-- The status card's last line, and the notification's, while reports saved with no connection wait on the phone. It takes the place of the next stop's time and distance, in one line on a narrow phone. The count is grouped, e.g. "1,244", as the phone keeps up to 8,640. -->
     <plurals name="tracking_waiting">
         <item quantity="one">%1$,d report to send when online</item>
@@ -668,6 +671,7 @@
     <string name="tracking_notification_signed_out">Signed out. Open the app to sign in.</string>
     <!-- The status card's problem line, "Reports refused" over "Ask your dispatcher", as one line. -->
     <string name="tracking_notification_reports_refused">Reports refused. Ask your dispatcher.</string>
+    <string name="tracking_notification_server_error">Server error. Riders can\'t see you.</string>
     <string name="tracking_notification_resume_title">Reports paused</string>
     <string name="tracking_notification_resume_text">Open the app to keep reporting.</string>
     <!-- The channel of the notification above, which makes a sound: Android lists it in the app's notification settings. -->
