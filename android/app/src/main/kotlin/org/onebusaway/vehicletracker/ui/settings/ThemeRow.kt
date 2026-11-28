@@ -75,6 +75,6 @@ private fun ThemeList(theme: ThemeChoice, onChoose: (ThemeChoice) -> Unit, onDis
                 }
             }
         },
-        confirmButton = { QuietButton(stringResource(R.string.language_list_cancel), onClick = onDismiss) },
+        confirmButton = { QuietButton(stringResource(R.string.theme_list_cancel), onClick = onDismiss) },
     )
 }
