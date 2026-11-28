@@ -17,7 +17,7 @@ import UIKit
     }
 
     func shown(_ choice: OccupancyChoice, voiceOver: Bool) throws -> UIWindow {
-        AccessibilityClient.turnOn()
+        try AccessibilityClient.turnOn()
         let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let window = UIWindow(windowScene: scene)
         window.rootViewController = UIHostingController(rootView: OccupancyRow(trip: trip, choice: choice, voiceOver: voiceOver))
@@ -78,22 +78,22 @@ import UIKit
     }
 }
 
-/// A missing library or switch fails the test at once, saying which.
+/// A missing library or switch stops the test at once, saying which.
 @MainActor @Suite struct AccessibilityClientTests {
-    @Test func aLibraryThatWontOpenFailsTheTest_namingIt() {
-        withKnownIssue {
-            #expect(AccessibilityClient.automationSwitch(library: "/usr/lib/libNoSuchLibrary.dylib") == nil)
-        } matching: { issue in
-            issue.comments.contains { $0.rawValue.hasPrefix("could not open /usr/lib/libNoSuchLibrary.dylib: ") }
+    @Test func aLibraryThatWontOpenStopsTheTest_namingIt() {
+        let error = #expect(throws: AccessibilityClient.SetupError.self) {
+            try AccessibilityClient.turnOn(library: "/usr/lib/libNoSuchLibrary.dylib")
         }
+        #expect(error?.description.hasPrefix("could not open /usr/lib/libNoSuchLibrary.dylib: ") == true)
     }
 
-    @Test func aMissingSwitchFailsTheTest_namingIt() {
-        withKnownIssue {
-            #expect(AccessibilityClient.automationSwitch(symbol: "_AXSNoSuchSwitch") == nil)
-        } matching: { issue in
-            issue.comments.contains { $0.rawValue.hasPrefix("/usr/lib/libAccessibility.dylib has no _AXSNoSuchSwitch: ") }
+    @Test func aMissingSwitchStopsTheTest_namingIt_evenOnceItIsOn() throws {
+        try AccessibilityClient.turnOn()
+
+        let error = #expect(throws: AccessibilityClient.SetupError.self) {
+            try AccessibilityClient.turnOn(symbol: "_AXSNoSuchSwitch")
         }
+        #expect(error?.description.hasPrefix("/usr/lib/libAccessibility.dylib has no _AXSNoSuchSwitch: ") == true)
     }
 }
 
@@ -104,23 +104,29 @@ import UIKit
 @MainActor enum AccessibilityClient {
     private static var isOn = false
 
-    static func turnOn() {
-        guard !isOn, let automation = automationSwitch() else { return }
+    /// Throws when the switch can't be had, which stops the test there
+    /// rather than leaving it to wait out elements that never come. The
+    /// switch is looked up each time, so a test of that finds it missing
+    /// even once another test has turned it on.
+    static func turnOn(library path: String = "/usr/lib/libAccessibility.dylib",
+                       symbol name: String = "_AXSSetAutomationEnabled") throws {
+        let automation = try automationSwitch(library: path, symbol: name)
+        guard !isOn else { return }
         automation(1)
         isOn = true
     }
 
-    /// The switch, or nil once the test has failed saying why it can't be
-    /// had, rather than waiting out elements that never come.
-    static func automationSwitch(library path: String = "/usr/lib/libAccessibility.dylib",
-                                 symbol name: String = "_AXSSetAutomationEnabled") -> (@convention(c) (Int32) -> Void)? {
+    /// Why the switch can't be had, in dlerror's words.
+    nonisolated struct SetupError: Error, CustomStringConvertible {
+        let description: String
+    }
+
+    private static func automationSwitch(library path: String, symbol name: String) throws -> (@convention(c) (Int32) -> Void) {
         guard let library = dlopen(path, RTLD_NOW) else {
-            Issue.record("could not open \(path): \(lastLoadError)")
-            return nil
+            throw SetupError(description: "could not open \(path): \(lastLoadError)")
         }
         guard let symbol = dlsym(library, name) else {
-            Issue.record("\(path) has no \(name): \(lastLoadError)")
-            return nil
+            throw SetupError(description: "\(path) has no \(name): \(lastLoadError)")
         }
         return unsafeBitCast(symbol, to: (@convention(c) (Int32) -> Void).self)
     }
