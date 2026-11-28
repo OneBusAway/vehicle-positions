@@ -1,23 +1,32 @@
 package main
 
 import (
+	"bytes"
 	"compress/gzip"
+	"crypto/sha256"
+	"encoding/hex"
 	"log/slog"
 	"mime"
 	"net/http"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
-// compressAdminSite sends what the admin website loads in fewer bytes: its
-// pages, the admin API its scripts read, and the timetable routes its map
-// reads. The driver apps read the timetable routes as well and get the same.
+// compressAdminSite sends what the admin website loads in fewer bytes. Its
+// pages and the admin API its scripts read are compressed. The timetable
+// routes its map reads are compressed too, and a client that has an answer
+// can ask whether it changed instead of downloading it again (revalidated).
+// The driver apps read the timetable routes as well and get the same.
 func compressAdminSite(next http.Handler) http.Handler {
 	compressed := gzipped(next)
+	timetable := gzipped(revalidated(next))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch p := r.URL.Path; {
-		case strings.HasPrefix(p, "/admin/"), strings.HasPrefix(p, "/api/v1/admin/"), strings.HasPrefix(p, "/api/v1/gtfs/"):
+		case strings.HasPrefix(p, "/api/v1/gtfs/"):
+			timetable.ServeHTTP(w, r)
+		case strings.HasPrefix(p, "/admin/"), strings.HasPrefix(p, "/api/v1/admin/"):
 			compressed.ServeHTTP(w, r)
 		default:
 			next.ServeHTTP(w, r)
@@ -176,4 +185,60 @@ func acceptsGzip(r *http.Request) bool {
 		}
 	}
 	return false
+}
+
+// revalidated lets a client keep an answer and ask whether it has changed.
+// The answer's hash goes out as its ETag, and a client that sends the hash
+// back gets a 304 with no body while the answer would be the same. The
+// handler runs either way, so the answer is always judged against the
+// current one: what is saved is sending it again. The live map reads every
+// route's trips for the day on each visit, about 45 KB a route on the demo
+// schedule, and they change once a day.
+//
+// The ETag is a weak one because the same answer goes out compressed and
+// not.
+func revalidated(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			next.ServeHTTP(w, r)
+			return
+		}
+		held := &heldResponse{header: w.Header()}
+		next.ServeHTTP(held, r)
+		if held.status != 0 && held.status != http.StatusOK {
+			w.WriteHeader(held.status)
+			_, _ = w.Write(held.body.Bytes())
+			return
+		}
+		sum := sha256.Sum256(held.body.Bytes())
+		w.Header().Set("ETag", `W/"`+hex.EncodeToString(sum[:8])+`"`)
+		// private: the answer is for a signed-in client. no-cache: a kept
+		// copy is used only after the server has said it still stands.
+		w.Header().Set("Cache-Control", "private, no-cache")
+		// ServeContent answers If-None-Match from the ETag set above.
+		http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(held.body.Bytes()))
+	})
+}
+
+// heldResponse keeps a handler's response in memory, for revalidated to hash
+// before any of it is sent.
+type heldResponse struct {
+	header http.Header
+	status int
+	body   bytes.Buffer
+}
+
+func (h *heldResponse) Header() http.Header { return h.header }
+
+func (h *heldResponse) WriteHeader(status int) {
+	if h.status == 0 {
+		h.status = status
+	}
+}
+
+func (h *heldResponse) Write(b []byte) (int, error) {
+	if h.status == 0 {
+		h.status = http.StatusOK
+	}
+	return h.body.Write(b)
 }

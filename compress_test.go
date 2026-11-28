@@ -414,3 +414,132 @@ func TestNewHandler_SendsTheAdminSiteCompressed(t *testing.T) {
 	require.Equal(t, "gzip", health.Header().Get("Content-Encoding"))
 	assert.Contains(t, gunzip(t, health.Body.Bytes()), `"reports"`)
 }
+
+func TestRevalidated_AnswersWhatTheClientHoldsWith304(t *testing.T) {
+	body := `{"routes":[{"id":"R1"}]}`
+	calls := 0
+	h := revalidated(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls++
+		writeJSON(w, http.StatusOK, map[string]string{"answer": body})
+	}))
+
+	first := request(h, http.MethodGet, "/api/v1/gtfs/routes")
+	require.Equal(t, http.StatusOK, first.Code)
+	etag := first.Header().Get("ETag")
+	require.Regexp(t, `^W/"[0-9a-f]{16}"$`, etag)
+	assert.Equal(t, "private, no-cache", first.Header().Get("Cache-Control"))
+	assert.Equal(t, "application/json", first.Header().Get("Content-Type"))
+	assert.Contains(t, first.Body.String(), `"answer"`)
+
+	again := request(h, http.MethodGet, "/api/v1/gtfs/routes", "If-None-Match", etag)
+	assert.Equal(t, http.StatusNotModified, again.Code)
+	assert.Empty(t, again.Body.String())
+	assert.Equal(t, etag, again.Header().Get("ETag"))
+	assert.Equal(t, "private, no-cache", again.Header().Get("Cache-Control"))
+	assert.Equal(t, 2, calls, "the handler runs each time, so the answer is judged against the current one")
+
+	body = `{"routes":[{"id":"R1"},{"id":"R2"}]}`
+	changed := request(h, http.MethodGet, "/api/v1/gtfs/routes", "If-None-Match", etag)
+	assert.Equal(t, http.StatusOK, changed.Code)
+	assert.NotEqual(t, etag, changed.Header().Get("ETag"))
+	assert.Contains(t, changed.Body.String(), "R2")
+}
+
+// Only a 200 is an answer worth keeping: an error goes out as the handler
+// wrote it, and so does the answer to anything but a GET.
+func TestRevalidated_LeavesTheRestAlone(t *testing.T) {
+	for _, tc := range []struct {
+		name, method string
+		status       int
+	}{
+		{"unknown trip", http.MethodGet, http.StatusNotFound},
+		{"no schedule", http.MethodGet, http.StatusServiceUnavailable},
+		{"a post", http.MethodPost, http.StatusOK},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := revalidated(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				writeJSON(w, tc.status, map[string]string{"error": "unknown trip"})
+			}))
+
+			w := request(h, tc.method, "/api/v1/gtfs/trips/nope", "If-None-Match", "*")
+
+			assert.Equal(t, tc.status, w.Code)
+			assert.JSONEq(t, `{"error":"unknown trip"}`, w.Body.String())
+			assert.Equal(t, "application/json", w.Header().Get("Content-Type"))
+			assert.Empty(t, w.Header().Get("ETag"))
+			assert.Empty(t, w.Header().Get("Cache-Control"))
+		})
+	}
+}
+
+// A handler's first status is the one that counts, as it is for the server:
+// one written after another, or after the body has begun, changes nothing.
+func TestRevalidated_KeepsTheFirstStatus(t *testing.T) {
+	refused := revalidated(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, "no such trip")
+	}))
+	w := request(refused, http.MethodGet, "/api/v1/gtfs/trips/nope")
+	assert.Equal(t, http.StatusNotFound, w.Code)
+	assert.Empty(t, w.Header().Get("ETag"))
+
+	late := revalidated(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, `{"routes":[]}`)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	w = request(late, http.MethodGet, "/api/v1/gtfs/routes")
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.NotEmpty(t, w.Header().Get("ETag"))
+	assert.Equal(t, `{"routes":[]}`, w.Body.String())
+}
+
+// Only the schedule's answers can be kept: the admin's pages and its API's
+// answers change from one request to the next.
+func TestCompressAdminSite_KeepsOnlyTheSchedule(t *testing.T) {
+	body := `{"trips":[` + strings.Repeat(`{"id":"T1"},`, 400) + `{"id":"T2"}]}`
+	h := compressAdminSite(answering(http.StatusOK, body, "Content-Type", "application/json"))
+
+	for _, path := range []string{"/api/v1/gtfs/routes", "/api/v1/gtfs/routes/R1/trips", "/api/v1/gtfs/trips/T1"} {
+		w := request(h, http.MethodGet, path, "Accept-Encoding", "gzip")
+		require.Equal(t, http.StatusOK, w.Code, path)
+		require.NotEmpty(t, w.Header().Get("ETag"), path)
+		assert.Equal(t, "private, no-cache", w.Header().Get("Cache-Control"), path)
+		assert.Equal(t, "gzip", w.Header().Get("Content-Encoding"), path)
+
+		again := request(h, http.MethodGet, path, "Accept-Encoding", "gzip", "If-None-Match", w.Header().Get("ETag"))
+		assert.Equal(t, http.StatusNotModified, again.Code, path)
+		assert.Empty(t, again.Body.String(), path)
+		assert.Empty(t, again.Header().Get("Content-Encoding"), path)
+	}
+	for _, path := range []string{"/admin/trips", "/api/v1/admin/vehicles/live", "/api/v1/gtfsx", "/api/v1/trips", "/gtfs-rt/vehicle-positions"} {
+		w := request(h, http.MethodGet, path, "Accept-Encoding", "gzip", "If-None-Match", "*")
+		assert.Equal(t, http.StatusOK, w.Code, path)
+		assert.Empty(t, w.Header().Get("ETag"), path)
+		assert.Empty(t, w.Header().Get("Cache-Control"), path)
+	}
+}
+
+// The schedule's routes, through the production handler: an answer the
+// client holds is a 304, and only for a client that is signed in.
+func TestNewHandler_LetsAClientKeepTheSchedule(t *testing.T) {
+	h := newSiteHandler(t)
+
+	trip := getPage(t, h, "/api/v1/gtfs/trips/T1")
+	require.Equal(t, http.StatusOK, trip.Code)
+	assert.Contains(t, trip.Body.String(), `"id":"T1"`)
+	etag := trip.Header().Get("ETag")
+	require.NotEmpty(t, etag)
+	again := getPage(t, h, "/api/v1/gtfs/trips/T1", "If-None-Match", etag)
+	assert.Equal(t, http.StatusNotModified, again.Code)
+	assert.Empty(t, again.Body.String())
+
+	health := getPage(t, h, "/api/v1/admin/health")
+	require.Equal(t, http.StatusOK, health.Code)
+	assert.Empty(t, health.Header().Get("ETag"), "a poll's answer is not kept")
+
+	// Signed out, the schedule is refused before there is anything to keep.
+	signedOut := request(h, http.MethodGet, "/api/v1/gtfs/trips/T1", "If-None-Match", etag)
+	assert.Equal(t, http.StatusUnauthorized, signedOut.Code)
+	assert.Empty(t, signedOut.Header().Get("ETag"))
+}
