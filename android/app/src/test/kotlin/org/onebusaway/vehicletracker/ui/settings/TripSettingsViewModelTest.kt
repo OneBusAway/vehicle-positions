@@ -1,11 +1,14 @@
 package org.onebusaway.vehicletracker.ui.settings
 
+import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -76,13 +79,16 @@ class TripSettingsViewModelTest {
         assertEquals(saved, vm.settings.value)
     }
 
+    // The store reads again every few seconds for as long as it is collected, so virtual time never runs out of work:
+    // runCurrent, not advanceUntilIdle, and the view model's scope ends with the test.
     @Test fun `choices the phone can't read are the defaults, and a tap is dropped`() = runTest(dispatcher) {
         val vm = TripSettingsViewModel(DataStoreTripSettingsStore(FailingDataStore(IOException("the file is gone"))))
-        advanceUntilIdle()
+        runCurrent()
         assertEquals(TripSettings(), vm.settings.value)
 
         vm.onVibrates(false)
-        advanceUntilIdle()
+        runCurrent()
         assertEquals(TripSettings(), vm.settings.value)
+        vm.viewModelScope.cancel()
     }
 }

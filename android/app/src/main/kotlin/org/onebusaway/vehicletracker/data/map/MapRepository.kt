@@ -146,7 +146,7 @@ class MapRepository @Inject constructor(
         val without = record.copy(current = left, pending = null, deleted = record.deleted + server)
         store.save(without)
         _state.value = MapFileState.Deleted
-        if (OpenMaps.none) store.deleteUnlisted(without)
+        store.deleteUnlisted(without)
     }
 
     private fun deleteFailed() {

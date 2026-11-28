@@ -53,6 +53,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import org.onebusaway.vehicletracker.R
 import org.onebusaway.vehicletracker.data.OccupancyStatus
@@ -106,7 +107,8 @@ fun TrackingScreen(
     KeepScreenOn(chosen.screenOn)
     val context = LocalContext.current
     val vibrate = remember(context) { problemVibration(context) }
-    VibrateOnProblem(state.tracking.problem, vibrationOn(tripSettings), vibrate)
+    val problems = remember(viewModel) { viewModel.uiState.map { it.tracking.problem } }
+    VibrateOnProblem(problems, vibrationOn(tripSettings), vibrate)
     val mapSupported = remember { supportsMap(context.glEsVersion()) }
     // Its state is kept here, and only the tip reads it, so neither the map nor the panel is recomposed for it.
     val sentTip = rememberScreenTip()

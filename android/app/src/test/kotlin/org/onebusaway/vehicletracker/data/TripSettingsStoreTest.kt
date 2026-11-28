@@ -1,13 +1,25 @@
 package org.onebusaway.vehicletracker.data
 
+import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -74,6 +86,27 @@ class TripSettingsStoreTest {
         assertEquals(TripSettings(), store.settings.first())
     }
 
+    // CodeRabbit on #666: one failed read used to leave the defaults for as long as the screen was up.
+    @Test fun `after a read failure the defaults show, and the choices come back once they can be read`() = runTest {
+        val disk = MemoryDataStore()
+        DataStoreTripSettingsStore(disk).setMapUp(MapUp.NORTH)
+        val store = DataStoreTripSettingsStore(FailingAtFirst(disk, failures = 2))
+        val seen = mutableListOf<TripSettings>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { store.settings.toList(seen) }
+
+        assertEquals(listOf(TripSettings()), seen)
+        advanceTimeBy(READ_RETRY_DELAY)
+        runCurrent()
+        assertEquals("still failing, and the defaults not again", listOf(TripSettings()), seen)
+        advanceTimeBy(READ_RETRY_DELAY)
+        runCurrent()
+        assertEquals(listOf(TripSettings(), TripSettings(mapUp = MapUp.NORTH)), seen)
+
+        store.setVibrates(false)
+        runCurrent()
+        assertEquals("and a later choice shows", TripSettings(mapUp = MapUp.NORTH, vibrates = false), seen.last())
+    }
+
     @Test fun `a non-IO storage failure is not swallowed`() = runTest {
         val store = DataStoreTripSettingsStore(FailingDataStore(IllegalStateException("a bug, not a bad disk")))
 
@@ -81,4 +114,24 @@ class TripSettingsStoreTest {
 
         assertTrue("expected an IllegalStateException, got $failure", failure is IllegalStateException)
     }
+}
+
+/** Preferences in memory, as a DataStore holds them. */
+private class MemoryDataStore : DataStore<Preferences> {
+    private val stored = MutableStateFlow(emptyPreferences())
+    override val data: Flow<Preferences> = stored
+    override suspend fun updateData(transform: suspend (Preferences) -> Preferences): Preferences =
+        transform(stored.value).also { stored.value = it }
+}
+
+/** [disk], whose first [failures] reads fail as a busy or damaged file does. */
+private class FailingAtFirst(private val disk: DataStore<Preferences>, private var failures: Int) : DataStore<Preferences> {
+    override val data: Flow<Preferences> = flow {
+        if (failures > 0) {
+            failures--
+            throw IOException("the file can't be read right now")
+        }
+        emitAll(disk.data)
+    }
+    override suspend fun updateData(transform: suspend (Preferences) -> Preferences): Preferences = disk.updateData(transform)
 }
