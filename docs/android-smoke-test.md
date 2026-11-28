@@ -984,6 +984,51 @@ served, and airplane mode off.
 
    **Expected outcome:** it downloads as in step 2, and the page says **Ready**.
 
+### Check 5c: Change password
+
+Changing the password signs out every other phone signed in as the driver,
+and this one stays signed in. Sign in once more with curl, as the other phone:
+
+```bash
+OTHER_REFRESH=$(curl -s -X POST $BASE/api/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"driver@example.com","password":"driverpass123"}' \
+  | python3 -c 'import sys,json;print(json.load(sys.stdin)["refresh_token"])')
+```
+
+1. Tap the account button, then **Change password** under **Account**.
+
+   **Expected outcome:** three password fields, each with an eye, "At least 8
+   characters" under the second, and "Other phones signed in as you are signed
+   out. This one stays signed in." under them. **Change password** at the foot
+   is grey until all three hold something.
+
+2. Type `wrong-pass` as the current password, `newpass123` twice, and tap
+   **Change password**.
+
+   **Expected outcome:** "That's not your current password." under the first
+   field. Type `driverpass123` there instead, `short` and `shorter` in the
+   other two, and tap again: "Use at least 8 characters." and "The two new
+   passwords don't match." under them, and nothing is sent.
+
+3. Type `newpass123` in both new fields and tap **Change password**.
+
+   **Expected outcome:** **Changing password** with a spinner while it is out,
+   and Back does nothing. Then the page goes back to **Settings**, which says
+   "Password changed. Other phones were signed out." at its foot. The other
+   phone is signed out, and this one is not: tap **Privacy**, and the server
+   log shows a `401` on `/api/v1/agency`, then a refresh and the same request
+   again with `200`.
+
+   ```bash
+   curl -s -o /dev/null -w '%{http_code}\n' -X POST $BASE/api/v1/auth/refresh \
+     -H 'Content-Type: application/json' -d "{\"refresh_token\":\"$OTHER_REFRESH\"}"
+   # 401
+   ```
+
+4. Put the password back for the other checks: change it again from
+   `newpass123` to `driverpass123`.
+
 ### Check 6 — The server refuses to start without a schedule
 
 Drivers pick their route and run from the schedule, so the server does not run

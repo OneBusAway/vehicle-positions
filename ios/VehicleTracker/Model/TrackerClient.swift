@@ -79,9 +79,6 @@ nonisolated final class TrackerClient: TrackerAPI, Sendable {
         try decode(AgencyInfo.self, try await send("GET", "api/v1/agency"))
     }
 
-    /// `path` with `id` after it as one segment. A GTFS id can hold a "/",
-    /// which `appending(path:)` leaves as a separator, so the server sees
-    /// another path and answers 404; it reads "%2F" back as part of the id.
     /// `POST /api/v1/auth/password`, with this phone's refresh token, which
     /// the server keeps good while it ends every other sign-in. The token is
     /// read once no refresh is out, as one out may be spending it. A 409 says
@@ -113,6 +110,9 @@ nonisolated final class TrackerClient: TrackerAPI, Sendable {
         return await refresher.settledRefreshToken(signInID: stored.signInID)
     }
 
+    /// `path` with `id` after it as one segment. A GTFS id can hold a "/",
+    /// which `appending(path:)` leaves as a separator, so the server sees
+    /// another path and answers 404; it reads "%2F" back as part of the id.
     private func url(_ path: String, id: String) -> URL {
         baseURL.appending(path: path).appending(component: id)
     }

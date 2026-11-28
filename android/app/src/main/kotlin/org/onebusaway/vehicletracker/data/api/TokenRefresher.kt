@@ -56,7 +56,7 @@ class TokenRefresher(
     private val clock: () -> Long,
     private val cachedRefreshDueAt: () -> Long?,
     private val refreshApi: (serverUrl: String) -> RefreshApi,
-) {
+) : RefreshTokens {
     private val lock = Any()
 
     /**
@@ -131,9 +131,28 @@ class TokenRefresher(
             val refreshed = trade(serverUrl, refreshToken)
             if (refreshed == null) {
                 AppLog.w(TAG, "The server refused the refresh token; the driver signs in again at the next 401.")
-                dropRefreshToken()
+                dropRefreshToken(refreshToken)
             }
             return refreshed
+        }
+    }
+
+    // Read under the lock every trade holds from start to save, so none is spending the token as it is read.
+    override fun settledRefreshToken(): String? = synchronized(lock) { storedSession().refreshToken }
+
+    override fun refreshTokenAfterConflict(sent: String): String? {
+        synchronized(lock) {
+            val stored = storedSession()
+            val current = stored.refreshToken ?: return null
+            // Another request's trade spent it on the way, and saved the pair it got.
+            if (current != sent) return current
+            val serverUrl = stored.serverUrl ?: return null
+            if (trade(serverUrl, current) == null) {
+                AppLog.w(TAG, "The server refused the refresh token after a conflict; the driver signs in again.")
+                dropRefreshToken(current)
+                return null
+            }
+            return storedSession().refreshToken
         }
     }
 
@@ -174,20 +193,38 @@ class TokenRefresher(
             runBlocking { sessionStore.saveRefreshed(tokens, spentRefreshToken) }
         } catch (e: GeneralSecurityException) {
             AppLog.w(TAG, "Could not encrypt the refreshed tokens; dropping the spent refresh token.", e)
-            dropRefreshToken()
+            dropRefreshToken(spentRefreshToken)
         } catch (e: IOException) {
             AppLog.w(TAG, "Could not save the refreshed tokens; dropping the spent refresh token.", e)
-            dropRefreshToken()
+            dropRefreshToken(spentRefreshToken)
         }
     }
 
-    private fun dropRefreshToken() {
+    private fun dropRefreshToken(spent: String) {
         try {
-            runBlocking { sessionStore.dropRefreshToken() }
+            runBlocking { sessionStore.dropRefreshToken(spent) }
         } catch (e: IOException) {
             AppLog.w(TAG, "Could not drop the refresh token.", e)
         }
     }
+}
+
+/**
+ * The refresh token a request names in its body, as the password change does. Blocking, like [TokenRefresher]: call it
+ * off the main thread.
+ */
+interface RefreshTokens {
+    /** The stored refresh token, read when no refresh is under way to spend it. Null when there is none. */
+    fun settledRefreshToken(): String?
+
+    /**
+     * After the server turned away [sent] as spent or no longer good (a 409): the refresh token to send again with.
+     * Another request's refresh may have replaced it already; otherwise it is refreshed now. Null when the server
+     * refused it, and the sign-in is over.
+     *
+     * @throws java.io.IOException when the server can't be reached or can't refresh right now.
+     */
+    fun refreshTokenAfterConflict(sent: String): String?
 }
 
 /**

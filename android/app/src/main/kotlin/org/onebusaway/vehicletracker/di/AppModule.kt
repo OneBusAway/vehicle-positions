@@ -34,6 +34,8 @@ import org.onebusaway.vehicletracker.data.KeystoreCryptor
 import org.onebusaway.vehicletracker.data.LocationNoticeStore
 import org.onebusaway.vehicletracker.data.ManagedServerSource
 import org.onebusaway.vehicletracker.data.OfflineFixQueue
+import org.onebusaway.vehicletracker.data.PasswordChanger
+import org.onebusaway.vehicletracker.data.PasswordRepository
 import org.onebusaway.vehicletracker.data.PrivacyPolicySource
 import org.onebusaway.vehicletracker.data.RestrictionsManagedServerSource
 import org.onebusaway.vehicletracker.data.SessionStore
@@ -44,6 +46,7 @@ import org.onebusaway.vehicletracker.data.TripStateStore
 import org.onebusaway.vehicletracker.data.VehiclePrefsStore
 import org.onebusaway.vehicletracker.data.api.ApiFactory
 import org.onebusaway.vehicletracker.data.api.BoundApi
+import org.onebusaway.vehicletracker.data.api.RefreshTokens
 import org.onebusaway.vehicletracker.data.api.TokenRefresher
 import org.onebusaway.vehicletracker.data.api.TrackerApi
 import org.onebusaway.vehicletracker.data.api.TrackerApiProvider
@@ -132,6 +135,9 @@ class ApiHolder(private val sessionStore: SessionStore, scope: CoroutineScope, c
     }
 
     val apiFactory: ApiFactory = ApiFactory(refresher) { token ?: storedToken() }
+
+    /** For a request that names the refresh token in its body, as the password change does. */
+    val refreshTokens: RefreshTokens get() = refresher
 
     init {
         sessionStore.session
@@ -280,6 +286,12 @@ object AppModule {
     @Provides
     @Singleton
     fun provideApiFactory(holder: ApiHolder): ApiFactory = holder.apiFactory
+
+    @Provides
+    fun provideRefreshTokens(holder: ApiHolder): RefreshTokens = holder.refreshTokens
+
+    @Provides
+    fun providePasswordChanger(repository: PasswordRepository): PasswordChanger = repository
 
     /**
      * A lazy accessor for repositories (`VehicleRepository`, `TripRepository`) that must not

@@ -109,6 +109,7 @@ class SettingsScreenTest {
         var permissionCheck = 0
         var tripSettings = 0
         var offlineMap = 0
+        var changePassword = 0
         var signOuts = 0
         var signedOut = 0
         val themes = mutableListOf<ThemeChoice>()
@@ -129,9 +130,13 @@ class SettingsScreenTest {
         screenOn: ScreenOn = ScreenOn.CHARGING,
         offlineMap: OfflineMap? = null,
         dark: Boolean = false,
+        passwordChanged: Boolean = false,
+        onPasswordChangedShown: () -> Unit = {},
     ) {
         AppTheme(darkTheme = dark) {
             SettingsContent(
+                passwordChanged = passwordChanged,
+                onPasswordChangedShown = onPasswordChangedShown,
                 readiness = readiness,
                 locationFix = locationFix,
                 account = account,
@@ -144,6 +149,7 @@ class SettingsScreenTest {
                 onPermissionCheck = { calls.permissionCheck++ },
                 onTripSettings = { calls.tripSettings++ },
                 onOfflineMap = { calls.offlineMap++ },
+                onChangePassword = { calls.changePassword++ },
                 onSignOut = { calls.signOuts++ },
                 onSignedOut = { calls.signedOut++ },
                 onChooseTheme = { calls.themes += it },
@@ -262,6 +268,30 @@ class SettingsScreenTest {
         assertFalse("nor Settings under it", settingsRead())
         val notices = SemanticsMatcher.expectValue(SemanticsProperties.IsTraversalGroup, true) and hasAnyDescendant(hasText(string(R.string.location_notice_title)))
         assertTrue("the notice is a traversal group of its own", compose.onAllNodes(notices).fetchSemanticsNodes().isNotEmpty())
+    }
+
+    @Test
+    fun theAccountRowOpensChangePassword() {
+        compose.setContent { Content() }
+
+        compose.onNode(hasText(string(R.string.change_password_title)) and hasClickAction()).performScrollTo().performClick()
+
+        assertEquals(1, calls.changePassword)
+    }
+
+    // Back from Change password: said once, and the flag taken back so a rotation doesn't say it again.
+    @Test
+    fun aChangedPasswordIsSaidOnce() {
+        var changed by mutableStateOf(false)
+        var shown = 0
+        compose.setContent { Content(passwordChanged = changed, onPasswordChangedShown = { shown++; changed = false }) }
+        val said = string(R.string.change_password_changed)
+        compose.onAllNodesWithText(said).assertCountEquals(0)
+
+        changed = true
+
+        compose.waitUntil(5_000) { compose.onAllNodesWithText(said).fetchSemanticsNodes().isNotEmpty() }
+        assertEquals(1, shown)
     }
 
     @Test
@@ -689,7 +719,7 @@ class SettingsScreenTest {
         val headings = compose.onAllNodes(isHeading()).fetchSemanticsNodes()
             .sortedBy { it.boundsInRoot.top }
             .map { it.config[SemanticsProperties.Text].first().text }
-        assertEquals(listOf(R.string.settings_title, R.string.settings_group_phone, R.string.settings_group_app, R.string.help_section_about).map { string(it) }, headings)
+        assertEquals(listOf(R.string.settings_title, R.string.settings_group_phone, R.string.settings_group_app, R.string.settings_group_account, R.string.help_section_about).map { string(it) }, headings)
     }
 
     // --- The largest text ---

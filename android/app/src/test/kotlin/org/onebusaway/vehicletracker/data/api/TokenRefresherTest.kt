@@ -327,10 +327,24 @@ class TokenRefresherTest {
         assertEquals(Session(serverUrl, "b1", NOW, "rb1", NOW + 900, "next@example.com"), store.session.first())
     }
 
+    @Test fun `a sign-in that lands while a refused refresh is out keeps its refresh token`() = runTest {
+        val store = EncryptedSessionStore(newDataStore(), FakeCryptor())
+        store.saveLogin(serverUrl, "d@example.com", IssuedTokens("a1", "r1", ISSUED_AT + 900, ISSUED_AT))
+        // The next driver signs in after the server has refused r1 and before r1 is dropped.
+        fake.refreshReply = {
+            runBlocking { store.saveLogin(serverUrl, "next@example.com", IssuedTokens("b1", "rb1", NOW + 900, NOW)) }
+            unauthorized("invalid or expired refresh token")
+        }
+
+        runCatching { holder(store).api().myVehicles() }
+
+        assertEquals(Session(serverUrl, "b1", NOW, "rb1", NOW + 900, "next@example.com"), store.session.first())
+    }
+
     @Test fun `a refresh token that can't be dropped still lets the 401 through`() = runTest {
         fake.refreshReply = { unauthorized("invalid or expired refresh token") }
         val readOnly = object : SessionStore by sessions {
-            override suspend fun dropRefreshToken() { throw IOException("Read-only file system") }
+            override suspend fun dropRefreshToken(spent: String) { throw IOException("Read-only file system") }
         }
 
         val failure = runCatching { holder(readOnly).api().myVehicles() }.exceptionOrNull()

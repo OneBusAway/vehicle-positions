@@ -430,11 +430,11 @@ private fun PasswordField(
  * TalkBack reads a field's error as its own, in place of the "Invalid input" the field says by itself; the line
  * under the field is then left out, so the error is not read twice.
  */
-private fun Modifier.fieldError(message: String?): Modifier =
+internal fun Modifier.fieldError(message: String?): Modifier =
     if (message == null) this else semantics { error(message) }
 
 @Composable
-private fun FieldError(message: String) {
+internal fun FieldError(message: String) {
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
         Icon(painterResource(R.drawable.ic_error), contentDescription = null, modifier = Modifier.size(18.dp))
         Text(message, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.clearAndSetSemantics {})

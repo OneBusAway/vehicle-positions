@@ -7,6 +7,7 @@ import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -28,6 +29,8 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -94,10 +97,13 @@ fun SettingsScreen(
     onPermissionCheck: () -> Unit,
     onTripSettings: () -> Unit,
     onOfflineMap: () -> Unit,
+    onChangePassword: () -> Unit,
     onHelp: () -> Unit,
     onPrivacy: () -> Unit,
     onLicenses: () -> Unit,
     onSignedOut: () -> Unit,
+    passwordChanged: Boolean = false,
+    onPasswordChangedShown: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
     tripSettingsViewModel: TripSettingsViewModel = hiltViewModel(),
     offlineMapViewModel: OfflineMapViewModel = hiltViewModel(),
@@ -120,6 +126,7 @@ fun SettingsScreen(
     val notice = rememberLocationNotice(noticeViewModel)
     val fixes = rememberPermissionFixes(onAnswer = access::refresh, notice = notice)
     val readiness = readiness(access.value, waiting)
+
     // The header's Allow, before Android asks for location.
     LocationNoticeHost(fixes.noticeFor != null, notice.server, onAgree = fixes::agreeToNotice, onNotNow = fixes::declineNotice) {
         SettingsContent(
@@ -136,6 +143,9 @@ fun SettingsScreen(
             onPermissionCheck = onPermissionCheck,
             onTripSettings = onTripSettings,
             onOfflineMap = onOfflineMap,
+            onChangePassword = onChangePassword,
+            passwordChanged = passwordChanged,
+            onPasswordChangedShown = onPasswordChangedShown,
             onSignOut = accountViewModel::onSignOut,
             onSignedOut = onSignedOut,
             onChooseTheme = { if (viewModel.onChooseTheme(it)) activity?.recreate() },
@@ -183,6 +193,7 @@ internal fun SettingsContent(
     onPermissionCheck: () -> Unit,
     onTripSettings: () -> Unit,
     onOfflineMap: () -> Unit,
+    onChangePassword: () -> Unit,
     onSignOut: () -> Unit,
     onSignedOut: () -> Unit,
     onChooseTheme: (ThemeChoice) -> Unit,
@@ -190,59 +201,81 @@ internal fun SettingsContent(
     onPrivacy: () -> Unit,
     onLicenses: () -> Unit,
     onShare: () -> Unit,
+    passwordChanged: Boolean = false,
+    onPasswordChangedShown: () -> Unit = {},
 ) {
     // Not a tap: it fires once the phone has forgotten the driver.
     LaunchedEffect(account.signedOut) { if (account.signedOut) onSignedOut() }
+
+    // Back from Change password once the password changed. Shown in this screen's scope, so taking the flag back
+    // does not cut it short.
+    val snackbar = remember { SnackbarHostState() }
+    val snackbarScope = rememberCoroutineScope()
+    val changed = stringResource(R.string.change_password_changed)
+    LaunchedEffect(passwordChanged) {
+        if (!passwordChanged) return@LaunchedEffect
+        snackbarScope.launch { snackbar.showSnackbar(changed) }
+        onPasswordChangedShown()
+    }
 
     var confirming by rememberSaveable { mutableStateOf(false) }
     val scroll = rememberScrollState()
     val fold = remember(scroll) { HeaderFold(scroll) }
 
-    Column(Modifier.fillMaxSize().nestedScroll(fold.settling).verticalScroll(scroll)) {
-        // Over the rows, which go under it once it has folded.
-        ReadinessHeader(readiness, locationFix, fold, onBack, onFix, onPermissionCheck, Modifier.zIndex(1f))
-        Column(
-            Modifier
-                .clearOfHeader(fold)
-                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
-                .padding(start = 16.dp, top = 30.dp, end = 16.dp, bottom = 32.dp),
-        ) {
-            AccountCard(account) { confirming = true }
-            GroupTitle(R.string.settings_group_phone)
-            PermissionCheckRow(readiness.state, onPermissionCheck)
-            SettingsRow(
-                icon = R.drawable.ic_near_me,
-                title = stringResource(R.string.trip_settings_title),
-                detail = stringResource(if (screenOn == ScreenOn.ALWAYS) R.string.settings_screen_always else R.string.settings_screen_charging),
-                place = if (offlineMap == null) GroupPlace.LAST else GroupPlace.MIDDLE,
-                opens = true,
-                onClick = onTripSettings,
-            )
-            // Not there when the agency has no map.
-            offlineMap?.let { OfflineMapRow(it, onOfflineMap) }
-            GroupTitle(R.string.settings_group_app)
-            LanguageChooser { shown, opensPhoneSettings, onClick ->
+    Box {
+        Column(Modifier.fillMaxSize().nestedScroll(fold.settling).verticalScroll(scroll)) {
+            // Over the rows, which go under it once it has folded.
+            ReadinessHeader(readiness, locationFix, fold, onBack, onFix, onPermissionCheck, Modifier.zIndex(1f))
+            Column(
+                Modifier
+                    .clearOfHeader(fold)
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
+                    .padding(start = 16.dp, top = 30.dp, end = 16.dp, bottom = 32.dp),
+            ) {
+                AccountCard(account) { confirming = true }
+                GroupTitle(R.string.settings_group_phone)
+                PermissionCheckRow(readiness.state, onPermissionCheck)
                 SettingsRow(
-                    icon = R.drawable.ic_language,
-                    title = stringResource(R.string.language_list_title),
-                    detail = if (opensPhoneSettings) {
-                        "${shown.ownName}\n${stringResource(R.string.language_row_phone_note)}"
-                    } else {
-                        shown.ownName
-                    },
-                    place = GroupPlace.FIRST,
+                    icon = R.drawable.ic_near_me,
+                    title = stringResource(R.string.trip_settings_title),
+                    detail = stringResource(if (screenOn == ScreenOn.ALWAYS) R.string.settings_screen_always else R.string.settings_screen_charging),
+                    place = if (offlineMap == null) GroupPlace.LAST else GroupPlace.MIDDLE,
                     opens = true,
-                    onClick = onClick,
+                    onClick = onTripSettings,
                 )
+                // Not there when the agency has no map.
+                offlineMap?.let { OfflineMapRow(it, onOfflineMap) }
+                GroupTitle(R.string.settings_group_app)
+                LanguageChooser { shown, opensPhoneSettings, onClick ->
+                    SettingsRow(
+                        icon = R.drawable.ic_language,
+                        title = stringResource(R.string.language_list_title),
+                        detail = if (opensPhoneSettings) {
+                            "${shown.ownName}\n${stringResource(R.string.language_row_phone_note)}"
+                        } else {
+                            shown.ownName
+                        },
+                        place = GroupPlace.FIRST,
+                        opens = true,
+                        onClick = onClick,
+                    )
+                }
+                ThemeRow(theme, GroupPlace.LAST, onChooseTheme)
+                GroupTitle(R.string.settings_group_account)
+                SettingsRow(R.drawable.ic_key, stringResource(R.string.change_password_title), null, GroupPlace.ONLY, opens = true, onClick = onChangePassword)
+                GroupTitle(R.string.help_section_about)
+                SettingsRow(R.drawable.ic_help, stringResource(R.string.help_title), null, GroupPlace.FIRST, opens = true, onClick = onHelp)
+                SettingsRow(R.drawable.ic_share, stringResource(R.string.help_share), stringResource(R.string.help_share_detail), GroupPlace.MIDDLE, onClick = onShare)
+                SettingsRow(R.drawable.ic_shield_person, stringResource(R.string.privacy_title), null, GroupPlace.MIDDLE, opens = true, onClick = onPrivacy)
+                SettingsRow(R.drawable.ic_description, stringResource(R.string.licenses_title), null, GroupPlace.MIDDLE, opens = true, onClick = onLicenses)
+                SettingsRow(R.drawable.ic_info, stringResource(R.string.help_version), isolated(version), GroupPlace.LAST)
             }
-            ThemeRow(theme, GroupPlace.LAST, onChooseTheme)
-            GroupTitle(R.string.help_section_about)
-            SettingsRow(R.drawable.ic_help, stringResource(R.string.help_title), null, GroupPlace.FIRST, opens = true, onClick = onHelp)
-            SettingsRow(R.drawable.ic_share, stringResource(R.string.help_share), stringResource(R.string.help_share_detail), GroupPlace.MIDDLE, onClick = onShare)
-            SettingsRow(R.drawable.ic_shield_person, stringResource(R.string.privacy_title), null, GroupPlace.MIDDLE, opens = true, onClick = onPrivacy)
-            SettingsRow(R.drawable.ic_description, stringResource(R.string.licenses_title), null, GroupPlace.MIDDLE, opens = true, onClick = onLicenses)
-            SettingsRow(R.drawable.ic_info, stringResource(R.string.help_version), isolated(version), GroupPlace.LAST)
         }
+        SnackbarHost(
+            snackbar,
+            Modifier.align(Alignment.BottomCenter)
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom)),
+        )
     }
 
     if (confirming) SignOutDialog(account.signingOut, onSignOut, onDismiss = { confirming = false })
