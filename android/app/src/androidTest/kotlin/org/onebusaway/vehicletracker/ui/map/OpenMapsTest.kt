@@ -48,7 +48,7 @@ class OpenMapsTest {
     @Test
     fun aMapIsOpenFromWhenItIsMadeUntilItGoes() {
         assumeTrue("the map needs OpenGL ES 3", supportsMap(compose.activity.glEsVersion()))
-        assertTrue("no map before", OpenMaps.none)
+        assertTrue("no map before", OpenMaps.whileNoneOpen {})
         var shown by mutableStateOf(true)
         compose.setContent {
             AppTheme {
@@ -57,10 +57,10 @@ class OpenMapsTest {
         }
 
         compose.waitForIdle()
-        assertFalse("open while it shows", OpenMaps.none)
+        assertFalse("open while it shows", OpenMaps.whileNoneOpen {})
 
         shown = false
         compose.waitForIdle()
-        assertTrue("and no longer once it has gone", OpenMaps.none)
+        assertTrue("and no longer once it has gone", OpenMaps.whileNoneOpen {})
     }
 }

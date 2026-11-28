@@ -164,9 +164,9 @@ fun Context.glEsVersion(): Int = getSystemService(ActivityManager::class.java).d
  * the status colour of how it is keeping to the schedule. Off the route, a dotted line joins it to
  * where it was matched. The camera follows with [up] at the top: heading-up the vehicle is a third
  * of the way up the part of the map that [contentPadding], the screen's own cards and bars over
- * it, leaves uncovered, and north-up in the middle of it. Under it is the agency's street map once the file is on the phone, and a plain
- * background until then, with a note while the first copy downloads. The note and Re-center sit
- * at the bottom left, inside [controlsPadding].
+ * it, leaves uncovered, and north-up in the middle of it. Under it is the agency's street map once
+ * the file is on the phone, and a plain background until then, with a note while the first copy
+ * downloads. The note and Re-center sit at the bottom left, inside [controlsPadding].
  */
 @Composable
 fun RouteMap(
@@ -420,9 +420,13 @@ private class RouteMapController(
         }
     }
 
-    /** Puts the streets in [file] under the trip, unless the map already has a file. */
+    /**
+     * Puts the streets in [file] under the trip, unless the map already has a file. A file deleted before this map came
+     * up is left out, as the screen may still be showing the state from before the delete. Once the map is up, no file
+     * is deleted under it ([OpenMaps]).
+     */
     fun useStreets(file: File?) {
-        if (file == null || streetFile != null || destroyed) return
+        if (file == null || streetFile != null || destroyed || !file.isFile) return
         streetFile = file
         map?.let(::loadStyle)
     }

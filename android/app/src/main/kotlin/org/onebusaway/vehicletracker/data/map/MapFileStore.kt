@@ -110,19 +110,20 @@ class MapFileStore(
 
     /**
      * Deletes every file [record] does not name: maps replaced by a newer one or dropped by the
-     * agency, and downloads given up on. Only safe while no map has a file open, which is why the
-     * app does it at start, before any map opens, and after the driver deletes the map only when
-     * [OpenMaps] says none is open.
+     * agency, and downloads given up on. Only while no map is up, as [OpenMaps] has it: the app
+     * does it at start, before any map opens, and after the driver deletes the map. Returns false,
+     * having deleted nothing, while a map is up; the files then wait for the next start.
      */
-    suspend fun deleteUnlisted(record: MapRecord) = withContext(io) {
-        val keep = setOfNotNull(
-            METADATA,
-            record.current?.fileName,
-            record.pending?.fileName?.let { it + PART_SUFFIX },
-        )
-        directory.listFiles()?.filter { it.name !in keep }?.forEach { stray ->
-            if (!stray.deleteRecursively()) AppLog.w(TAG, "Could not delete ${stray.name}")
+    suspend fun deleteUnlisted(record: MapRecord): Boolean = withContext(io) {
+        OpenMaps.whileNoneOpen {
+            val keep = setOfNotNull(
+                METADATA,
+                record.current?.fileName,
+                record.pending?.fileName?.let { it + PART_SUFFIX },
+            )
+            directory.listFiles()?.filter { it.name !in keep }?.forEach { stray ->
+                if (!stray.deleteRecursively()) AppLog.w(TAG, "Could not delete ${stray.name}")
+            }
         }
-        Unit
     }
 }

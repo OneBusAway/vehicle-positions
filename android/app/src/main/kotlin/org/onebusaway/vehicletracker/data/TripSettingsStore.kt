@@ -8,12 +8,18 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.retryWhen
 import java.io.IOException
+import kotlin.time.Duration.Companion.seconds
 
 private const val TAG = "TripSettingsStore"
+
+/** How long after a failed read the trip settings are read again. */
+internal val READ_RETRY_DELAY = 5.seconds
 
 /** When the display stays on while Tracking shows. [storedAs] is its name on the phone. */
 enum class ScreenOn(val storedAs: String) {
@@ -57,11 +63,14 @@ class DataStoreTripSettingsStore(private val dataStore: DataStore<Preferences>) 
 
     override val settings: Flow<TripSettings> = dataStore.data
         // Choices that can't be read are the defaults, as for the session: Tracking collects this, and a read failure let
-        // through would crash it. Anything that is not an IO failure still propagates.
-        .catch { e ->
-            if (e !is IOException) throw e
-            AppLog.w(TAG, "Could not read the trip settings", e)
+        // through would crash it. They are read again a little later, so the choices come back once the phone can read
+        // them. Anything that is not an IO failure still propagates.
+        .retryWhen { e, attempt ->
+            if (e !is IOException) return@retryWhen false
+            if (attempt == 0L) AppLog.w(TAG, "Could not read the trip settings", e)
             emit(emptyPreferences())
+            delay(READ_RETRY_DELAY)
+            true
         }
         .map { prefs ->
             val none = TripSettings()
@@ -71,6 +80,8 @@ class DataStoreTripSettingsStore(private val dataStore: DataStore<Preferences>) 
                 vibrates = prefs[Keys.VIBRATES] ?: none.vibrates,
             )
         }
+        // A read that keeps failing gives the defaults each time.
+        .distinctUntilChanged()
 
     override suspend fun setScreenOn(screenOn: ScreenOn) {
         dataStore.edit { it[Keys.SCREEN_ON] = screenOn.storedAs }

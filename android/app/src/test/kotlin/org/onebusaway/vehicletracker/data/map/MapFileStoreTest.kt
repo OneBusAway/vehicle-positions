@@ -113,6 +113,24 @@ class MapFileStoreTest {
         assertEquals(setOf("map.json"), dir.list()!!.toSet())
     }
 
+    @Test fun `with a map up, cleaning deletes nothing, and the files wait for the next time`() = runTest {
+        val dir = tempFolder.newFolder()
+        val store = MapFileStore(dir)
+        store.save(MapRecord())
+        File(dir, "map-a.pmtiles").writeText("x")
+
+        OpenMaps.opened()
+        try {
+            assertFalse(store.deleteUnlisted(MapRecord()))
+        } finally {
+            OpenMaps.closed()
+        }
+        assertTrue("a map may be reading it", File(dir, "map-a.pmtiles").exists())
+
+        assertTrue(store.deleteUnlisted(MapRecord()))
+        assertEquals(setOf("map.json"), dir.list()!!.toSet())
+    }
+
     @Test fun `cleaning a directory that does not exist yet does nothing`() = runTest {
         MapFileStore(File(tempFolder.root, "missing")).deleteUnlisted(record)
     }

@@ -8,9 +8,11 @@ import android.os.VibratorManager
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.flow.Flow
 import org.onebusaway.vehicletracker.data.TrackingProblem
 import org.onebusaway.vehicletracker.data.TripSettings
 
@@ -24,16 +26,24 @@ internal fun vibratesFor(before: TrackingProblem, problem: TrackingProblem): Boo
 internal fun vibrationOn(chosen: TripSettings?): Boolean = chosen?.vibrates ?: false
 
 /**
- * Vibrates once for each problem that comes up while Tracking is on screen, while it is [on]. Not for one that is there
- * already as the screen opens, nor again after a rotation.
+ * Vibrates once for each problem in [problems] that comes up while Tracking is on screen, while it is [on]. Not for one
+ * that is there already as the screen opens or comes back from the background, nor again after a rotation: each time
+ * the screen starts, it starts from the problem there is then.
  */
 @Composable
-internal fun VibrateOnProblem(problem: TrackingProblem, on: Boolean, vibrate: () -> Unit) {
-    var last by remember { mutableStateOf(problem) }
-    LaunchedEffect(problem) {
-        val vibrates = on && vibratesFor(last, problem)
-        last = problem
-        if (vibrates) vibrate()
+internal fun VibrateOnProblem(problems: Flow<TrackingProblem>, on: Boolean, vibrate: () -> Unit) {
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val vibrates by rememberUpdatedState(on)
+    val latestVibrate by rememberUpdatedState(vibrate)
+    LaunchedEffect(problems, lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            var last: TrackingProblem? = null
+            problems.collect { problem ->
+                val before = last
+                last = problem
+                if (before != null && vibrates && vibratesFor(before, problem)) latestVibrate()
+            }
+        }
     }
 }
 

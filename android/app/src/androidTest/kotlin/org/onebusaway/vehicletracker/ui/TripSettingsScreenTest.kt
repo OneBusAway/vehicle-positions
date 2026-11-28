@@ -28,8 +28,13 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -161,19 +166,29 @@ class TripSettingsScreenTest {
 
     // --- The vibration on Tracking ---
 
-    private var problem by mutableStateOf(TrackingProblem.NONE)
+    private val problems = MutableStateFlow(TrackingProblem.NONE)
     private var on by mutableStateOf(true)
     private var vibrations = 0
 
+    // Tracking as on a phone: on screen, or in the background with the driver in another app.
+    private val screen = object : LifecycleOwner {
+        val registry = LifecycleRegistry.createUnsafe(this).apply { currentState = Lifecycle.State.RESUMED }
+        override val lifecycle: Lifecycle get() = registry
+    }
+
+    private fun showVibration() = compose.setContent {
+        CompositionLocalProvider(LocalLifecycleOwner provides screen) { VibrateOnProblem(problems, on) { vibrations++ } }
+    }
+
     private fun becomes(next: TrackingProblem): Int {
-        problem = next
+        problems.value = next
         compose.waitForIdle()
         return vibrations
     }
 
     @Test
     fun eachProblemThatComesUpVibratesOnce() {
-        compose.setContent { VibrateOnProblem(problem, on) { vibrations++ } }
+        showVibration()
 
         assertEquals(0, becomes(TrackingProblem.NONE))
         assertEquals(1, becomes(TrackingProblem.NO_NETWORK))
@@ -184,18 +199,32 @@ class TripSettingsScreenTest {
 
     @Test
     fun aProblemThereAlreadyDoesNotVibrate() {
-        problem = TrackingProblem.NO_GPS
-        compose.setContent { VibrateOnProblem(problem, on) { vibrations++ } }
+        problems.value = TrackingProblem.NO_GPS
+        showVibration()
 
         compose.waitForIdle()
 
         assertEquals(0, vibrations)
     }
 
+    // The driver comes back to the problem line, as to one there already when the screen opens.
+    @Test
+    fun aProblemThatCameUpInTheBackgroundDoesNotVibrateOnReturn_butTheNextOneDoes() {
+        showVibration()
+        compose.runOnIdle { screen.registry.currentState = Lifecycle.State.CREATED }
+
+        assertEquals(0, becomes(TrackingProblem.NO_NETWORK))
+        compose.runOnIdle { screen.registry.currentState = Lifecycle.State.RESUMED }
+        compose.waitForIdle()
+
+        assertEquals("not on return", 0, vibrations)
+        assertEquals("on screen again", 1, becomes(TrackingProblem.AUTH_EXPIRED))
+    }
+
     @Test
     fun switchedOff_nothingVibrates_norForAProblemThereAsItIsSwitchedOn() {
         on = false
-        compose.setContent { VibrateOnProblem(problem, on) { vibrations++ } }
+        showVibration()
 
         assertEquals(0, becomes(TrackingProblem.NO_NETWORK))
         on = true
