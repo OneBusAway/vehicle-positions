@@ -78,6 +78,25 @@ import UIKit
     }
 }
 
+/// A missing library or switch fails the test at once, saying which.
+@MainActor @Suite struct AccessibilityClientTests {
+    @Test func aLibraryThatWontOpenFailsTheTest_namingIt() {
+        withKnownIssue {
+            #expect(AccessibilityClient.automationSwitch(library: "/usr/lib/libNoSuchLibrary.dylib") == nil)
+        } matching: { issue in
+            issue.comments.contains { $0.rawValue.hasPrefix("could not open /usr/lib/libNoSuchLibrary.dylib: ") }
+        }
+    }
+
+    @Test func aMissingSwitchFailsTheTest_namingIt() {
+        withKnownIssue {
+            #expect(AccessibilityClient.automationSwitch(symbol: "_AXSNoSuchSwitch") == nil)
+        } matching: { issue in
+            issue.comments.contains { $0.rawValue.hasPrefix("/usr/lib/libAccessibility.dylib has no _AXSNoSuchSwitch: ") }
+        }
+    }
+}
+
 /// SwiftUI builds its accessibility tree only for an assistive client.
 /// libAccessibility's automation switch, which UI testing tools such as
 /// EarlGrey throw, makes the test process one, so a test can read what
@@ -86,10 +105,28 @@ import UIKit
     private static var isOn = false
 
     static func turnOn() {
-        guard !isOn, let library = dlopen("/usr/lib/libAccessibility.dylib", RTLD_NOW),
-              let symbol = dlsym(library, "_AXSSetAutomationEnabled") else { return }
-        unsafeBitCast(symbol, to: (@convention(c) (Int32) -> Void).self)(1)
+        guard !isOn, let automation = automationSwitch() else { return }
+        automation(1)
         isOn = true
+    }
+
+    /// The switch, or nil once the test has failed saying why it can't be
+    /// had, rather than waiting out elements that never come.
+    static func automationSwitch(library path: String = "/usr/lib/libAccessibility.dylib",
+                                 symbol name: String = "_AXSSetAutomationEnabled") -> (@convention(c) (Int32) -> Void)? {
+        guard let library = dlopen(path, RTLD_NOW) else {
+            Issue.record("could not open \(path): \(lastLoadError)")
+            return nil
+        }
+        guard let symbol = dlsym(library, name) else {
+            Issue.record("\(path) has no \(name): \(lastLoadError)")
+            return nil
+        }
+        return unsafeBitCast(symbol, to: (@convention(c) (Int32) -> Void).self)
+    }
+
+    private static var lastLoadError: String {
+        dlerror().map { String(cString: $0) } ?? "no reason given"
     }
 
     /// The elements under `object`, in order, as an assistive client walks them.
