@@ -35,6 +35,11 @@ import Foundation
     nonisolated(unsafe) var agencyInfo = AgencyInfo(privacyPolicyURL: nil)
     nonisolated(unsafe) var agencyError: (any Error)?
     nonisolated(unsafe) var passwordError: (any Error)?
+    /// What each `myTrips` call answers, in order; once only one is left it
+    /// answers every call after.
+    nonisolated(unsafe) var myTripsAnswers: [Result<MyTripsPage, any Error>] = [.success(MyTripsPage(hasMore: false, trips: []))]
+    /// The limit and offset of each `myTrips` call.
+    private(set) nonisolated(unsafe) var myTripsRequests: [(limit: Int, offset: Int)] = []
     /// The current and new password of each change asked for.
     private(set) nonisolated(unsafe) var passwordChanges: [(String, String)] = []
 
@@ -59,6 +64,11 @@ import Foundation
     func myVehicles() async throws -> [Vehicle] {
         if let vehiclesError { throw vehiclesError }
         return vehicles
+    }
+    func myTrips(limit: Int, offset: Int) async throws -> MyTripsPage {
+        myTripsRequests.append((limit, offset))
+        let answer = myTripsAnswers.count > 1 ? myTripsAnswers.removeFirst() : myTripsAnswers[0]
+        return try answer.get()
     }
     func routes() async throws -> [RouteInfo] { routeList }
     func trips(routeID: String) async throws -> RouteTripsPage { page }

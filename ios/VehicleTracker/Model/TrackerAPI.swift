@@ -6,6 +6,7 @@ nonisolated protocol TrackerAPI: Sendable {
     func login(email: String, password: String) async throws -> AuthTokens
     func logout() async throws
     func myVehicles() async throws -> [Vehicle]
+    func myTrips(limit: Int, offset: Int) async throws -> MyTripsPage
     func routes() async throws -> [RouteInfo]
     func trips(routeID: String) async throws -> RouteTripsPage
     func trip(id: String) async throws -> TripGeometry

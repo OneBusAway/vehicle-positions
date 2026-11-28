@@ -1236,6 +1236,17 @@
         }
       }
     },
+    "%@ to %@ · Vehicle %@" : {
+      "comment" : "My trips: under where a trip went, when it started and ended, then the fleet number of its vehicle, e.g. '7:13 AM to 8:02 AM · Vehicle 4317'.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ to %2$@ · Vehicle %3$@"
+          }
+        }
+      }
+    },
     "%@, %@" : {
       "comment" : "VoiceOver label of a vehicle tile: the fleet number, then the label the agency gave the vehicle, e.g. '4317, Airport shuttle'.\nVoiceOver: a button on Permission check: its row's title, then what the button says, e.g. 'Location, Open Settings'.\nVoiceOver: a stop list row for a stop still ahead: the stop's name, then its scheduled time, e.g. 'Pine St & 4th Ave, 7:24 AM'.\nVoiceOver: the problem line in one sentence: what happened, then what it means or what to do, e.g. 'No connection, Riders can't see you'.",
       "localizations" : {
@@ -8257,6 +8268,9 @@
           }
         }
       }
+    },
+    "A trip shows here after you end it." : {
+      "comment" : "My trips: under 'No trips yet'."
     },
     "About" : {
       "comment" : "Settings: the heading over Help, Share diagnostics and the app's version.",
@@ -15464,6 +15478,9 @@
           }
         }
       }
+    },
+    "Couldn't load your trips" : {
+      "comment" : "My trips: the title when the list could not be loaded, and the banner when a refresh or the next page failed."
     },
     "Couldn't load your vehicles" : {
       "comment" : "Empty state title when the vehicle list could not be loaded.",
@@ -24673,6 +24690,9 @@
     "More" : {
       "comment" : "Privacy: the heading over the agency's privacy policy link."
     },
+    "My trips" : {
+      "comment" : "Settings, Account: the row, and the title of its page, which lists the trips the driver has made."
+    },
     "New password" : {
       "comment" : "Change password: the field for the password to sign in with from now on."
     },
@@ -26417,6 +26437,9 @@
           }
         }
       }
+    },
+    "No trips yet" : {
+      "comment" : "My trips: the title when the driver has ended no trip yet."
     },
     "No vehicle matches %@" : {
       "comment" : "Empty state title when the vehicle search finds nothing: what the driver typed, e.g. 'No vehicle matches 999'.",
@@ -54583,6 +54606,9 @@
         }
       }
     },
+    "Today" : {
+      "comment" : "My trips: the title over the trips that started today."
+    },
     "Too many tries. Wait a minute, then try again." : {
       "comment" : "Banner above the sign-in button when the server refused for too many attempts; its window is one minute.",
       "localizations" : {
@@ -59325,6 +59351,9 @@
           }
         }
       }
+    },
+    "Yesterday" : {
+      "comment" : "My trips: the title over the trips that started yesterday."
     },
     "You already have a trip running. End it before starting another." : {
       "comment" : "Banner when the server refused a start because the driver already has a trip running.",
