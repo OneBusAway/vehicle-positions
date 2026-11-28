@@ -1,4 +1,4 @@
-{{define "scripts"}}{{if .Overview}}<script src="/static/js/line.js" defer></script>{{end}}{{end}}
+{{define "scripts"}}{{if .Overview}}<script src="{{asset "js/line.js"}}" defer></script>{{end}}{{end}}
 
 {{define "content"}}
 {{with .Welcome}}

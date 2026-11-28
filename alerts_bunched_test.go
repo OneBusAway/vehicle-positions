@@ -460,7 +460,7 @@ func TestAlertsPage_Bunched(t *testing.T) {
 	body := getAdminPage(t, mux, "/admin/alerts")
 
 	assert.Contains(t, body, `<article class="card alert-row" data-kind="bunched">`)
-	assert.Contains(t, body, `/static/icons.svg#layers`)
+	assert.Contains(t, body, assetURL(t, "icons.svg")+"#layers")
 	assert.Contains(t, body, `<span class="pill pill-warn">Bunched</span>`)
 	assert.Contains(t, body, "1 min 15 s behind Bus L, every 10 min, open since "+now.Add(-4*time.Minute).UTC().Format("15:04")+"</span>")
 	assert.Contains(t, body, `data-filter="bunched" aria-pressed="false">Bunched <span class="n">1</span>`)

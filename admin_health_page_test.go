@@ -139,7 +139,7 @@ func TestHealthPageData_NewestMinuteFirst(t *testing.T) {
 // 24 hours.
 func renderHealthContent(t *testing.T, snap feedHealthResponse) string {
 	t.Helper()
-	tmpl, err := template.ParseFS(files, "web/templates/layout/parts.html", "web/templates/views/health.html")
+	tmpl, err := template.New("").Funcs(template.FuncMap{"asset": embeddedAssets(t).url}).ParseFS(files, "web/templates/layout/parts.html", "web/templates/views/health.html")
 	require.NoError(t, err)
 	var buf bytes.Buffer
 	require.NoError(t, tmpl.ExecuteTemplate(&buf, "content", healthPageData(snap, 1)))
@@ -516,7 +516,7 @@ func TestHealthPage_LastWeek(t *testing.T) {
 	store.rows[daysAgo] = healthHour{Hour: daysAgo, Reports: reportOutcomes{Accepted: 50}}
 	h := newStoredFeedHealth(t, clock, store)
 
-	tmpl, err := template.ParseFS(files, "web/templates/layout/parts.html", "web/templates/views/health.html")
+	tmpl, err := template.New("").Funcs(template.FuncMap{"asset": embeddedAssets(t).url}).ParseFS(files, "web/templates/layout/parts.html", "web/templates/views/health.html")
 	require.NoError(t, err)
 	var buf bytes.Buffer
 	require.NoError(t, tmpl.ExecuteTemplate(&buf, "content", healthPageData(h.report(context.Background(), 7), 7)))

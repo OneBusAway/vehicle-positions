@@ -10,6 +10,10 @@
     get: function (k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
     set: function (k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
   };
+  /* The icon sheet sits beside this script's folder, so its address carries the same version as this
+     script's and the browser answers from the copy it kept. */
+  var icons = new URL("../icons.svg", document.currentScript.src).pathname;
+  VT.icon = function (name) { return icons + "#" + name; };
   VT.getJSON = function (url) {
     return fetch(url, { headers: { Accept: "application/json" } }).then(function (r) {
       if (!r.ok) { var e = new Error("HTTP " + r.status); e.status = r.status; throw e; }
@@ -239,7 +243,7 @@
       a.className = "palette-item"; a.href = it.h; a.id = "palette-" + i;
       a.setAttribute("role", "option"); a.setAttribute("aria-selected", String(i === sel));
       a.innerHTML = '<svg class="icon" aria-hidden="true"><use></use></svg>';
-      $("use", a).setAttribute("href", "/static/icons.svg#" + it.i);
+      $("use", a).setAttribute("href", VT.icon(it.i));
       text.style.cssText = "min-width:0;flex:1"; text.textContent = it.t;
       sub.className = "sub"; sub.style.display = "block"; sub.textContent = it.s || "";
       text.appendChild(sub); a.appendChild(text); list.appendChild(a);

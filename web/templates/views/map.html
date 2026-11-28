@@ -1,7 +1,7 @@
-{{define "head"}}<link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css">{{end}}
+{{define "head"}}<link rel="stylesheet" href="{{asset "vendor/leaflet/leaflet.css"}}">{{end}}
 {{define "scripts"}}
-<script src="/static/vendor/leaflet/leaflet.js" defer></script>
-<script src="/static/js/map.js" defer></script>
+<script src="{{asset "vendor/leaflet/leaflet.js"}}" defer></script>
+<script src="{{asset "js/map.js"}}" defer></script>
 {{end}}
 {{define "content"}}
 <div class="page-map" id="map-root">

@@ -48,7 +48,7 @@ func reportsView(t *testing.T, r *serviceReporter, query string) (map[string]int
 // the layout around it.
 func renderReportsContent(t *testing.T, data map[string]interface{}) string {
 	t.Helper()
-	tmpl, err := template.ParseFS(files, "web/templates/layout/parts.html", "web/templates/views/reports.html")
+	tmpl, err := template.New("").Funcs(template.FuncMap{"asset": embeddedAssets(t).url}).ParseFS(files, "web/templates/layout/parts.html", "web/templates/views/reports.html")
 	require.NoError(t, err)
 	var buf bytes.Buffer
 	require.NoError(t, tmpl.ExecuteTemplate(&buf, "content", data))

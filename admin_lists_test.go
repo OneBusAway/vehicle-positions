@@ -170,7 +170,7 @@ func TestVehicleForm_MarksTheFieldThatFailed(t *testing.T) {
 	require.Equal(t, http.StatusUnprocessableEntity, w.Code)
 	body := w.Body.String()
 	assert.Contains(t, body, `value="bad id!" required aria-invalid="true" aria-describedby="id-err id-help"`)
-	assert.Regexp(t, `<div class="field-error" id="id-err"><svg[^>]*><use href="/static/icons.svg#error"/></svg>vehicle id must contain only`, body)
+	assert.Regexp(t, `<div class="field-error" id="id-err"><svg[^>]*><use href="`+assetURL(t, "icons.svg")+`#error"/></svg>vehicle id must contain only`, body)
 	assert.Contains(t, body, `role="alert"`)
 	assert.Contains(t, body, "The vehicle was not saved.</b> Fix the vehicle ID below.")
 }

@@ -23,8 +23,11 @@ type embeddedTemplates struct {
 // loadTemplates parses the embedded admin UI templates once at startup. It
 // returns an error rather than panicking so callers can log it with context
 // and exit cleanly, consistent with the rest of the server's startup error
-// handling.
-func loadTemplates() (*embeddedTemplates, error) {
+// handling. A template names a static file as {{asset "js/app.js"}}, which
+// is the address a browser may keep the file from (staticAssets.url).
+func loadTemplates(static *staticAssets) (*embeddedTemplates, error) {
+	funcs := template.FuncMap{"asset": static.url}
+
 	adminViews := []string{
 		"alerts.html",
 		"api_keys.html",
@@ -47,7 +50,7 @@ func loadTemplates() (*embeddedTemplates, error) {
 
 	admin := make(map[string]*template.Template, len(adminViews))
 	for _, view := range adminViews {
-		tmpl, err := template.ParseFS(
+		tmpl, err := template.New(view).Funcs(funcs).ParseFS(
 			files,
 			"web/templates/layout/*.html",
 			path.Join("web/templates/views", view),
@@ -62,7 +65,7 @@ func loadTemplates() (*embeddedTemplates, error) {
 	// a page that answered with an error.
 	public := make(map[string]*template.Template)
 	for _, view := range []string{"login.html", "error.html"} {
-		tmpl, err := template.ParseFS(
+		tmpl, err := template.New(view).Funcs(funcs).ParseFS(
 			files,
 			path.Join("web/templates/views", view),
 			"web/templates/layout/parts.html",
