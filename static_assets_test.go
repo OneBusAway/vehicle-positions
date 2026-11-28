@@ -149,6 +149,62 @@ func TestStaticAssets_AnyOtherAddressAsksEachTime(t *testing.T) {
 	}
 }
 
+func TestStaticAssets_SendsTextCompressed(t *testing.T) {
+	h := newTestHandler(t, true)
+	embedded := embeddedStaticFiles(t)
+
+	for _, name := range []string{"css/admin.css", "js/app.js", "js/map.js", "icons.svg", "vendor/leaflet/leaflet.js", "vendor/leaflet/leaflet.css"} {
+		body := embedded[name]
+		require.NotEmpty(t, body, name)
+
+		w := request(h, http.MethodGet, assetURL(t, name), "Accept-Encoding", "gzip, deflate, br")
+
+		require.Equal(t, http.StatusOK, w.Code, name)
+		require.Equal(t, "gzip", w.Header().Get("Content-Encoding"), name)
+		assert.Equal(t, "Accept-Encoding", w.Header().Get("Vary"), name)
+		assert.Equal(t, keptForAYear, w.Header().Get("Cache-Control"), name)
+		assert.Equal(t, strconv.Itoa(w.Body.Len()), w.Header().Get("Content-Length"), name)
+		assert.Less(t, w.Body.Len(), len(body)/2, name)
+		assert.True(t, string(body) == gunzip(t, w.Body.Bytes()), "%s does not unpack to the embedded file", name)
+
+		// A weak ETag: the same file in other bytes. It answers a 304 too.
+		etag := w.Header().Get("ETag")
+		require.Regexp(t, `^W/"[0-9a-f]{16}"$`, etag, name)
+		same := request(h, http.MethodGet, assetURL(t, name), "Accept-Encoding", "gzip", "If-None-Match", etag)
+		assert.Equal(t, http.StatusNotModified, same.Code, name)
+		assert.Empty(t, same.Body.String(), name)
+
+		// A client that does not ask gets the file as it is, and a cache
+		// between is still told the answer depends on what was asked.
+		plain := request(h, http.MethodGet, assetURL(t, name))
+		assert.Empty(t, plain.Header().Get("Content-Encoding"), name)
+		assert.Equal(t, "Accept-Encoding", plain.Header().Get("Vary"), name)
+		assert.Equal(t, strings.TrimPrefix(etag, "W/"), plain.Header().Get("ETag"), name)
+		assert.True(t, string(body) == plain.Body.String(), "%s is not the embedded file", name)
+	}
+
+	head := request(h, http.MethodHead, assetURL(t, "css/admin.css"), "Accept-Encoding", "gzip")
+	assert.Equal(t, http.StatusOK, head.Code)
+	assert.Equal(t, "gzip", head.Header().Get("Content-Encoding"))
+	assert.Empty(t, head.Body.String())
+}
+
+// The font and the images are compressed already, and gzip would only add to
+// them.
+func TestStaticAssets_SendsCompressedFilesAsTheyAre(t *testing.T) {
+	h := newTestHandler(t, true)
+	embedded := embeddedStaticFiles(t)
+
+	for _, name := range []string{"fonts/google-sans-flex.woff2", "vendor/leaflet/images/marker-icon.png"} {
+		w := request(h, http.MethodGet, assetURL(t, name), "Accept-Encoding", "gzip")
+
+		require.Equal(t, http.StatusOK, w.Code, name)
+		assert.Empty(t, w.Header().Get("Content-Encoding"), name)
+		assert.Empty(t, w.Header().Get("Vary"), name)
+		assert.True(t, string(embedded[name]) == w.Body.String(), "%s is not the embedded file", name)
+	}
+}
+
 // A folder is no file: the listing the standard file server gave is gone.
 func TestStaticAssets_NotFound(t *testing.T) {
 	h := newTestHandler(t, true)
@@ -221,6 +277,28 @@ func TestNewStaticAssets_ReadsATypeTheExtensionDoesNotGive(t *testing.T) {
 	require.NotNil(t, assets.files["font.webfont-2"])
 	assert.Equal(t, "text/css; charset=utf-8", assets.files["admin.css"].contentType)
 	assert.Equal(t, "font/woff2", assets.files["font.webfont-2"].contentType)
+}
+
+func TestNewStaticAssets_CompressesOnlyWhatShrinks(t *testing.T) {
+	text := strings.Repeat("body { color: red } ", 200)
+	// Bytes with no pattern to them, as a compressed font's are.
+	noise := make([]byte, 4000)
+	seed := uint32(1)
+	for i := range noise {
+		seed = seed*1664525 + 1013904223
+		noise[i] = byte(seed >> 24)
+	}
+	assets, err := newStaticAssets(fstest.MapFS{
+		"static/admin.css":  {Data: []byte(text)},
+		"static/font.woff2": {Data: noise},
+	}, "static")
+	require.NoError(t, err)
+
+	css, font := assets.files["admin.css"], assets.files["font.woff2"]
+	require.NotNil(t, css)
+	require.NotNil(t, font)
+	assert.Equal(t, text, gunzip(t, css.gzipped))
+	assert.Nil(t, font.gzipped, "gzip barely shrinks it")
 }
 
 // unreadableFS lists its files and fails to read them.
@@ -321,5 +399,76 @@ func TestStaticAssets_ThePreloadIsTheFontTheStylesheetAsksFor(t *testing.T) {
 		assert.Equal(t, http.StatusOK, got.Code)
 		assert.Equal(t, "font/woff2", got.Header().Get("Content-Type"))
 		assert.Equal(t, keptForAYear, got.Header().Get("Cache-Control"), "the font is fetched once and kept")
+	}
+}
+
+// What a first visit downloads: the page and every static file it names, as
+// sent to a browser that accepts gzip. A later visit downloads the page
+// alone. The budgets are 70 KB for a page and 140 KB for the live map, whose
+// timetable and tiles come on top.
+func TestStaticAssets_FirstVisitBudgets(t *testing.T) {
+	h := newSiteHandler(t)
+	staticAddresses := regexp.MustCompile(`(?:href|src)="(/static/[^"#]+)`)
+
+	for _, tc := range []struct {
+		path string
+		// files is how many static files the page names: the stylesheet, the
+		// font and the icons, the shell's script, and the map's Leaflet.
+		files  int
+		budget int
+	}{
+		{"/admin/login", 3, 70_000},
+		{"/admin/more", 4, 70_000},
+		{"/admin/trips", 4, 70_000},
+		{"/admin/map", 7, 140_000},
+	} {
+		page := getPage(t, h, tc.path, "Accept-Encoding", "gzip")
+		require.Equal(t, http.StatusOK, page.Code, tc.path)
+		require.Equal(t, "gzip", page.Header().Get("Content-Encoding"), tc.path)
+		total := page.Body.Len()
+		seen := map[string]struct{}{}
+		for _, m := range staticAddresses.FindAllStringSubmatch(gunzip(t, page.Body.Bytes()), -1) {
+			if _, again := seen[m[1]]; again {
+				continue
+			}
+			seen[m[1]] = struct{}{}
+			file := request(h, http.MethodGet, m[1], "Accept-Encoding", "gzip")
+			require.Equal(t, http.StatusOK, file.Code, m[1])
+			assert.Equal(t, keptForAYear, file.Header().Get("Cache-Control"), "%s names %s, which is kept", tc.path, m[1])
+			total += file.Body.Len()
+		}
+		require.Len(t, seen, tc.files, "the static files %s names", tc.path)
+		assert.LessOrEqual(t, total, tc.budget, "a first visit to %s", tc.path)
+	}
+}
+
+// Each of the site's own files, as sent to a browser that accepts gzip, with
+// a tenth of room over its size when the budget was set. Past that, the file
+// has grown enough to be looked at before its budget is raised.
+func TestStaticAssets_FileBudgets(t *testing.T) {
+	h := newTestHandler(t, true)
+	budgets := map[string]int{
+		"css/admin.css":                14_700,
+		"fonts/google-sans-flex.woff2": 35_800,
+		"icons.svg":                    7_000,
+		"js/app.js":                    6_400,
+		"js/line.js":                   1_300,
+		"js/map.js":                    12_500,
+		"js/trip_detail.js":            6_800,
+		"vendor/leaflet/leaflet.css":   3_900,
+		"vendor/leaflet/leaflet.js":    47_000,
+	}
+	for name := range embeddedStaticFiles(t) {
+		// The licence texts and Leaflet's stock images are on no page.
+		if strings.HasSuffix(name, ".txt") || strings.HasPrefix(name, "vendor/leaflet/images/") {
+			continue
+		}
+		budget, ok := budgets[name]
+		require.True(t, ok, "%s is a new static file: give it a budget here", name)
+
+		w := request(h, http.MethodGet, assetURL(t, name), "Accept-Encoding", "gzip")
+
+		require.Equal(t, http.StatusOK, w.Code, name)
+		assert.LessOrEqual(t, w.Body.Len(), budget, "%s as sent", name)
 	}
 }

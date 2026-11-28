@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"mime"
 	"net/http"
 	"path"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -20,9 +22,9 @@ const staticPrefix = "/static/"
 // staticAssets serves the admin website's own files: its stylesheet, scripts,
 // icons and font. Embedded files have no modification time, so the standard
 // file server sends them with nothing a browser can keep them by, and every
-// page downloaded all of them again. Here each file is hashed once, at
-// startup, and a page asks for it at an address that changes when any file
-// does (see url), so a browser fetches it once and keeps it.
+// page downloaded all of them again. Here each file is hashed and compressed
+// once, at startup, and a page asks for it at an address that changes when
+// any file does (see url), so a browser fetches it once and keeps it.
 type staticAssets struct {
 	// version is a hash of every file's name and contents.
 	version string
@@ -33,10 +35,14 @@ type staticFile struct {
 	contentType string
 	etag        string
 	body        []byte
+	// gzipped is nil for a file gzip barely shrinks: the font and the images
+	// are compressed already.
+	gzipped []byte
 }
 
-// embeddedStatic is the server's own static files, read and hashed once for
-// the process, however many admin UIs are built.
+// embeddedStatic is the server's own static files, prepared once for the
+// process: hashing and compressing them takes tens of milliseconds, which
+// each admin UI built would otherwise pay again.
 var embeddedStatic = sync.OnceValues(func() (*staticAssets, error) {
 	return newStaticAssets(files, "web/static")
 })
@@ -64,7 +70,11 @@ func newStaticAssets(fsys fs.FS, root string) (*staticAssets, error) {
 		if contentType == "" {
 			contentType = http.DetectContentType(body)
 		}
-		assets.files[name] = &staticFile{contentType: contentType, etag: `"` + hex.EncodeToString(sum[:8]) + `"`, body: body}
+		file := &staticFile{contentType: contentType, etag: `"` + hex.EncodeToString(sum[:8]) + `"`, body: body}
+		if gzipped := gzipBytes(body); len(gzipped) < len(body)*9/10 {
+			file.gzipped = gzipped
+		}
+		assets.files[name] = file
 		return nil
 	})
 	if err != nil {
@@ -72,6 +82,15 @@ func newStaticAssets(fsys fs.FS, root string) (*staticAssets, error) {
 	}
 	assets.version = hex.EncodeToString(set.Sum(nil)[:6])
 	return assets, nil
+}
+
+func gzipBytes(body []byte) []byte {
+	var buf bytes.Buffer
+	zw := gzip.NewWriter(&buf)
+	// Neither can fail: the writer is a buffer in memory.
+	_, _ = zw.Write(body)
+	_ = zw.Close()
+	return buf.Bytes()
 }
 
 // url is the address a page asks for the file name at, which the templates
@@ -118,6 +137,18 @@ func (a *staticAssets) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	} else {
 		h.Set("Cache-Control", "no-cache")
 	}
+	body := file.body
+	if file.gzipped != nil {
+		h.Add("Vary", "Accept-Encoding")
+		if acceptsGzip(r) {
+			body = file.gzipped
+			h.Set("Content-Encoding", "gzip")
+			// The same file in other bytes, which a weak ETag says.
+			h.Set("ETag", "W/"+file.etag)
+			// ServeContent leaves the length out beside a Content-Encoding.
+			h.Set("Content-Length", strconv.Itoa(len(body)))
+		}
+	}
 	// ServeContent answers If-None-Match from the ETag set above.
-	http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(file.body))
+	http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(body))
 }
