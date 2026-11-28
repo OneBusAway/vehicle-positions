@@ -37,7 +37,7 @@
   var rows = {}, listSig = "", chipSig = "", card = null;
 
   function h(tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
-  function icon(name) { var s = h("span"); s.innerHTML = '<svg class="icon" aria-hidden="true"><use href="/static/icons.svg#' + name + '"/></svg>'; return s.firstChild; }
+  function icon(name) { var s = h("span"); s.innerHTML = '<svg class="icon" aria-hidden="true"><use href="' + VT.icon(name) + '"/></svg>'; return s.firstChild; }
   // GTFS writes a colour as six hex digits with no "#". Anything else never reaches a style.
   function hex(c) { return /^[0-9a-fA-F]{6}$/.test(c || "") ? "#" + c : ""; }
   function ink(c) {

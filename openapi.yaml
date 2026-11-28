@@ -1097,6 +1097,10 @@ paths:
         search read it too). Registered only when a GTFS schedule is
         configured; without one the route does not exist and the server
         answers 404.
+
+        The three schedule routes send an `ETag` with a 200. A client that
+        sends it back in `If-None-Match` gets a 304 with no body while the
+        answer would be the same.
       responses:
         '200':
           description: Routes.
@@ -1104,6 +1108,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CatalogRoutes'
+        '304':
+          $ref: '#/components/responses/NotModified'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -1129,6 +1135,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CatalogRouteTrips'
+        '304':
+          $ref: '#/components/responses/NotModified'
         '400':
           description: '`date` was not `YYYYMMDD`.'
           content:
@@ -1170,6 +1178,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CatalogTrip'
+        '304':
+          $ref: '#/components/responses/NotModified'
         '400':
           description: '`date` was not `YYYYMMDD`.'
           content:
@@ -2565,6 +2575,10 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
+    NotModified:
+      description: |
+        The answer is the one the client holds: `If-None-Match` named the
+        `ETag` it would be sent with. No body.
     PayloadTooLarge:
       description: Request body exceeded the handler's size limit.
       content:

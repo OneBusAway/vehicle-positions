@@ -406,7 +406,7 @@ func TestDashboardPage_Overview(t *testing.T) {
 	assert.Contains(t, body, `<span class="veh" style="left:50.0%" data-veh="bus-1" title="Bus &lt;1&gt;">`, "the vehicle halfway along its route, its label escaped")
 	assert.Equal(t, 3, strings.Count(body, `<span class="stop" style="left:`), "T1's stops")
 	assert.Contains(t, body, "Nothing needs a look.")
-	assert.Contains(t, body, `<script src="/static/js/line.js" defer></script>`)
+	assert.Contains(t, body, `<script src="`+assetURL(t, "js/line.js")+`" defer></script>`)
 	assert.Contains(t, body, `role="img" aria-label="Location reports a minute over the last hour: 60 bars, the highest 0"`)
 	assert.NotContains(t, body, "Bus <1>")
 }

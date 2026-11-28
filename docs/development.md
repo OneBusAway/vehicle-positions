@@ -147,6 +147,16 @@ pinned version, so if you bump `TAILWIND_VERSION` in the `Makefile`, also
 bump the version CI downloads in `.github/workflows/ci.yml` and re-run `make
 css` to regenerate the checked-in output.
 
+A template names a file under `web/static` as `{{asset "js/app.js"}}`, not by
+its `/static/...` address. `asset` gives an address with a hash of all the
+static files in it, which a browser keeps without asking again; the hash
+changes when any file does, so nobody is left with an old copy. The plain
+`/static/...` address still works, but the browser checks it with the server
+on every page. In a script, `VT.icon(name)` gives an icon's address.
+`TestStaticAssets_NothingNamesAFileByABareAddress` fails on a bare address in
+a template or script, and a new file under `web/static` needs a line in
+`TestStaticAssets_FileBudgets`.
+
 Running behind a reverse proxy locally (rare, but if you're testing that
 path)? Set `TRUST_PROXY_HEADERS=true` so client-IP-based rate limiting and
 the session cookie's `Secure` flag look at `X-Forwarded-For` /

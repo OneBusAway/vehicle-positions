@@ -5,7 +5,6 @@ import (
 	"embed"
 	"errors"
 	"fmt"
-	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
@@ -229,18 +228,14 @@ func newHandler(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimite
 		if riderSvc != nil {
 			ui.rider = riderSvc
 		}
-		staticFiles, err := fs.Sub(files, "web/static")
-		if err != nil {
-			return nil, fmt.Errorf("prepare static files: %w", err)
-		}
-		mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFiles))))
+		mux.Handle("GET /static/", http.StripPrefix(staticPrefix, ui.static))
 		registerAdminUI(mux, ui)
 	}
 
 	// CSRF: rejects browser cross-origin non-safe requests; clients without
 	// Sec-Fetch-Site/Origin headers (Retrofit, curl) are unaffected (spec §4.3).
 	csrf := http.NewCrossOriginProtection()
-	return csrf.Handler(refuseUnstorableURL(mux)), nil
+	return csrf.Handler(refuseUnstorableURL(compressAdminSite(mux))), nil
 }
 
 // defaultDatabaseURL is the database the server and its subcommands use when

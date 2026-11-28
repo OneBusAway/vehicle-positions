@@ -77,6 +77,7 @@ type apiKeyPageStore interface {
 // adminUI owns the parsed templates and dependencies for all admin pages.
 type adminUI struct {
 	tmpl           *embeddedTemplates
+	static         *staticAssets
 	users          UserFetcher
 	signIns        SignInRecorder
 	failedSignIns  FailedSignInNoter
@@ -118,12 +119,17 @@ type adminUI struct {
 // trips, and vehicle dependencies (it implements appStore, a superset of all
 // of them).
 func newAdminUI(store appStore, tracker *Tracker, alerts *alertWatcher, reports *serviceReporter, health *feedHealth, jwtSecret []byte, limiter *LoginRateLimiter, cfg adminUIConfig) (*adminUI, error) {
-	tmpl, err := loadTemplates()
+	static, err := embeddedStatic()
+	if err != nil {
+		return nil, err
+	}
+	tmpl, err := loadTemplates(static)
 	if err != nil {
 		return nil, err
 	}
 	return &adminUI{
 		tmpl:           tmpl,
+		static:         static,
 		users:          store,
 		signIns:        store,
 		failedSignIns:  store,

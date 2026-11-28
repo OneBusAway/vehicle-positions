@@ -29,8 +29,8 @@ func TestAlertsPage_Rows(t *testing.T) {
 	assert.Equal(t, 2, strings.Count(body, `<article class="card alert-row"`))
 	assert.Contains(t, body, `<article class="card alert-row" data-kind="quiet">`)
 	assert.Contains(t, body, `<article class="card alert-row" data-kind="not_moving">`)
-	assert.Contains(t, body, `/static/icons.svg#signal_disconnected`)
-	assert.Contains(t, body, `/static/icons.svg#stop_circle`)
+	assert.Contains(t, body, assetURL(t, "icons.svg")+"#signal_disconnected")
+	assert.Contains(t, body, assetURL(t, "icons.svg")+"#stop_circle")
 	assert.Contains(t, body, `<span class="pill pill-warn">Gone quiet</span>`)
 	assert.Contains(t, body, `<span class="pill pill-warn">Not moving</span>`)
 	for _, class := range []string{"pill-early", "pill-late", "pill-error"} {

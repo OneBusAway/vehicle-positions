@@ -1,7 +1,7 @@
-{{define "head"}}<link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css">{{end}}
+{{define "head"}}<link rel="stylesheet" href="{{asset "vendor/leaflet/leaflet.css"}}">{{end}}
 {{define "scripts"}}
-<script src="/static/vendor/leaflet/leaflet.js" defer></script>
-<script src="/static/js/trip_detail.js" defer></script>
+<script src="{{asset "vendor/leaflet/leaflet.js"}}" defer></script>
+<script src="{{asset "js/trip_detail.js"}}" defer></script>
 {{end}}
 {{define "content"}}
 {{with .Trip}}

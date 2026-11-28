@@ -96,16 +96,16 @@ func TestShell_LeafletOnlyWhereThereIsAMap(t *testing.T) {
 
 	plain := getAdminPage(t, mux, "/admin/vehicles")
 	assert.NotContains(t, plain, "leaflet")
-	assert.Contains(t, plain, `<script src="/static/js/app.js" defer></script>`)
+	assert.Contains(t, plain, `<script src="`+assetURL(t, "js/app.js")+`" defer></script>`)
 
 	withMap := getAdminPage(t, mux, "/admin/map")
-	leaflet := strings.Index(withMap, `href="/static/vendor/leaflet/leaflet.css"`)
-	admin := strings.Index(withMap, `href="/static/css/admin.css"`)
+	leaflet := strings.Index(withMap, `href="`+assetURL(t, "vendor/leaflet/leaflet.css")+`"`)
+	admin := strings.Index(withMap, `href="`+assetURL(t, "css/admin.css")+`"`)
 	require.NotEqual(t, -1, leaflet)
 	require.NotEqual(t, -1, admin)
 	assert.Less(t, leaflet, admin, "admin.css must load after leaflet.css")
-	assert.Contains(t, withMap, `<script src="/static/vendor/leaflet/leaflet.js" defer></script>`)
-	assert.Contains(t, withMap, `<script src="/static/js/map.js" defer></script>`)
+	assert.Contains(t, withMap, `<script src="`+assetURL(t, "vendor/leaflet/leaflet.js")+`" defer></script>`)
+	assert.Contains(t, withMap, `<script src="`+assetURL(t, "js/map.js")+`" defer></script>`)
 }
 
 // TestShell_GlideOnlyOnTheLiveMap: the live map glides each vehicle's marker
@@ -265,7 +265,7 @@ func TestShell_FlashIsAToast(t *testing.T) {
 
 	failed := get("unassign_on_trip")
 	assert.Contains(t, failed, `<div class="toast" role="status" data-toast data-toast-stay>`, "a message that something did not go through stays until it is closed")
-	assert.Contains(t, failed, "/static/icons.svg#warning")
+	assert.Contains(t, failed, assetURL(t, "icons.svg")+"#warning")
 
 	assert.NotContains(t, get("no-such-code"), "data-toast")
 }

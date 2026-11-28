@@ -1,6 +1,6 @@
-{{define "icon"}}<svg class="icon" aria-hidden="true"><use href="/static/icons.svg#{{.}}"/></svg>{{end}}
-{{define "icon-sm"}}<svg class="icon icon-sm" aria-hidden="true"><use href="/static/icons.svg#{{.}}"/></svg>{{end}}
-{{define "icon-lg"}}<svg class="icon icon-lg" aria-hidden="true"><use href="/static/icons.svg#{{.}}"/></svg>{{end}}
+{{define "icon"}}<svg class="icon" aria-hidden="true"><use href="{{asset "icons.svg"}}#{{.}}"/></svg>{{end}}
+{{define "icon-sm"}}<svg class="icon icon-sm" aria-hidden="true"><use href="{{asset "icons.svg"}}#{{.}}"/></svg>{{end}}
+{{define "icon-lg"}}<svg class="icon icon-lg" aria-hidden="true"><use href="{{asset "icons.svg"}}#{{.}}"/></svg>{{end}}
 
 {{/* Where a viewer would otherwise find a form: what they see instead of being able to change it. */}}
 {{define "viewer-note"}}<div class="banner">{{template "icon" "info"}}<div>You are signed in as a viewer, so you can look but not change anything. An admin can make the change.</div></div>{{end}}

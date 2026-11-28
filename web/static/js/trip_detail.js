@@ -211,7 +211,9 @@
   function setPlaying(on) {
     playing = on;
     playButton.querySelector("span").textContent = on ? "Pause" : "Play";
-    playButton.querySelector("use").setAttribute("href", "/static/icons.svg#" + (on ? "pause" : "play_arrow"));
+    // The other icon of the sheet the page drew the button from, whatever its address.
+    const use = playButton.querySelector("use");
+    use.setAttribute("href", use.getAttribute("href").replace(/#.*$/, "#" + (on ? "pause" : "play_arrow")));
     if (on) {
       lastFrame = performance.now();
       requestAnimationFrame(frame);

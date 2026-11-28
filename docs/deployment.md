@@ -711,6 +711,10 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
+The site needs no `gzip` or caching settings for the admin website. The server
+compresses its own pages and files for a browser that asks, and tells the
+browser which files it may keep; nginx passes both through as they are.
+
 ### 7.3 Then, and only then, set `TRUST_PROXY_HEADERS=true`
 
 With the proxy in place, set `TRUST_PROXY_HEADERS=true` and restart the server.

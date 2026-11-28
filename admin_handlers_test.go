@@ -11,7 +11,7 @@ import (
 )
 
 func TestLoadTemplates(t *testing.T) {
-	tmpls, err := loadTemplates()
+	tmpls, err := loadTemplates(embeddedAssets(t))
 	require.NoError(t, err)
 	require.NotNil(t, tmpls)
 
@@ -26,7 +26,7 @@ func TestLoadTemplates(t *testing.T) {
 // from the template set yields a clean 500 rather than silently falling back to
 // another template or writing a partial 200 body.
 func TestRenderUnknownViewWritesCleanError(t *testing.T) {
-	tmpls, err := loadTemplates()
+	tmpls, err := loadTemplates(embeddedAssets(t))
 	require.NoError(t, err)
 
 	for _, set := range []map[string]*template.Template{tmpls.admin, tmpls.public} {
