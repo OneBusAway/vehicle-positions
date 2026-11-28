@@ -74,8 +74,8 @@ RETURNING id, name, email, role, active, created_at, updated_at;
 -- already ended later, so giving the old role back later cannot revive them.
 -- ended_at is read under GetUserForUpdate's lock from the clock tokens are
 -- issued by (Store.now), so a sign-in or refresh it waited for is before it.
--- The role read in the CASE is the row's value before this update. The email is stored lower-case, as CreateUser
--- stores it.
+-- The role read in the CASE is the row's value before this update. The email
+-- is stored lower-case, as CreateUser stores it.
 UPDATE users
 SET name = sqlc.arg(name), email = lower(sqlc.arg(email)), role = sqlc.arg(role),
     sessions_valid_after = CASE WHEN role <> sqlc.arg(role) THEN GREATEST(sessions_valid_after, sqlc.arg(ended_at)) ELSE sessions_valid_after END
