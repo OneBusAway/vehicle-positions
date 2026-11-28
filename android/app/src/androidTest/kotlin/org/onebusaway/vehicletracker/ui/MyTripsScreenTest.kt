@@ -9,12 +9,13 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -92,6 +93,10 @@ class MyTripsScreenTest {
         }
     }
 
+    // From the top of what scrolls to its bottom, whatever the screen's density: on CI's 160 dpi emulator, a swipe
+    // a fixed number of pixels above the middle of the screen began on the top bar and pulled nothing.
+    private fun pullDown() = compose.onNode(hasScrollAction()).performTouchInput { swipeDown() }
+
     private fun said(text: String) = SemanticsMatcher("contentDescription contains $text") { node ->
         node.config.getOrElseNullable(SemanticsProperties.ContentDescription) { null }.orEmpty().any { it.replace(' ', ' ').contains(text) }
     }
@@ -130,7 +135,7 @@ class MyTripsScreenTest {
 
         compose.onNodeWithText(string(R.string.my_trips_empty_title)).assertIsDisplayed()
         compose.onNodeWithText(string(R.string.my_trips_empty_detail)).assertIsDisplayed()
-        compose.onRoot().performTouchInput { swipeDown(startY = centerY - 200f, endY = bottom) }
+        pullDown()
         compose.waitForIdle()
         assertEquals(1, refreshes)
     }
@@ -150,7 +155,7 @@ class MyTripsScreenTest {
     fun aPullRefreshes_andAFailedRefreshKeepsTheListUnderTheBanner() {
         list = MyTripsList().receivedFirst(sheet)
         show()
-        compose.onRoot().performTouchInput { swipeDown(startY = centerY - 300f, endY = bottom) }
+        pullDown()
         compose.waitForIdle()
         assertEquals(1, refreshes)
 
@@ -172,8 +177,11 @@ class MyTripsScreenTest {
 
         list = list.failed(next)
         compose.waitForIdle()
+        // At the end of the list, which runs past a small screen.
+        val tryAgain = hasText(string(R.string.my_trips_retry)) and hasClickAction()
+        compose.onNode(hasScrollAction()).performScrollToNode(tryAgain)
         compose.onNodeWithText(string(R.string.my_trips_error_title)).assertIsDisplayed()
-        compose.onNode(hasText(string(R.string.my_trips_retry)) and hasClickAction()).performClick()
+        compose.onNode(tryAgain).performClick()
         assertEquals(1, moreRetries)
         assertTrue("asked once", loadMore.size == 1)
     }

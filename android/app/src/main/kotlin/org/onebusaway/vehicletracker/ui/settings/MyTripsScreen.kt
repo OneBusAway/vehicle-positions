@@ -129,32 +129,39 @@ private fun Trips(
     val todayTitle = stringResource(R.string.my_trips_today)
     val yesterdayTitle = stringResource(R.string.my_trips_yesterday)
     val locale = LocalConfiguration.current.locales[0]
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 32.dp)) {
-        if (list.refreshFailed) item(key = "refresh-failed") { RefreshFailed(onRefresh) }
-        for (day in days) {
-            item(key = "day-${day.date}") {
-                GroupTitle(dayTitle(day.date, today, todayTitle, yesterdayTitle) { date, withYear -> dateTitle(date, withYear, locale) })
+    fun titleOf(date: LocalDate) = dayTitle(date, today, todayTitle, yesterdayTitle) { day, withYear ->
+        dateTitle(day, withYear, locale)
+    }
+    Column(Modifier.fillMaxSize()) {
+        // Above the list, not its first row: a lazy list keeps the row it shows first when one is put in above it, so
+        // a banner put in at the top of a list longer than the screen would land just out of view.
+        if (list.refreshFailed) RefreshFailed(onRefresh, Modifier.padding(horizontal = 16.dp))
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 32.dp)) {
+            for (day in days) {
+                item(key = "day-${day.date}") { GroupTitle(titleOf(day.date)) }
+                itemsIndexed(day.trips, key = { _, trip -> trip.id }) { index, trip ->
+                    TripRow(trip, zone, Modifier.groupRow(groupPlace(index, day.trips.size)))
+                }
             }
-            itemsIndexed(day.trips, key = { _, trip -> trip.id }) { index, trip ->
-                TripRow(trip, zone, Modifier.groupRow(groupPlace(index, day.trips.size)))
-            }
-        }
-        val next = list.nextPage
-        if (next != null) {
-            item(key = "more") {
-                // The pickers' spinner, while the next page loads.
-                Box(Modifier.fillMaxWidth().padding(vertical = 20.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                LaunchedEffect(next) { onLoadMore(next) }
-            }
-        } else if (list.moreFailed) {
-            item(key = "more-failed") {
-                AttentionBanner(
-                    icon = R.drawable.ic_cloud_off,
-                    text = stringResource(R.string.my_trips_error_title),
-                    modifier = Modifier.padding(top = 16.dp),
-                    action = stringResource(R.string.my_trips_retry),
-                    onAction = onRetryMore,
-                )
+            val next = list.nextPage
+            if (next != null) {
+                item(key = "more") {
+                    // The pickers' spinner, while the next page loads.
+                    Box(Modifier.fillMaxWidth().padding(vertical = 20.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                    LaunchedEffect(next) { onLoadMore(next) }
+                }
+            } else if (list.moreFailed) {
+                item(key = "more-failed") {
+                    AttentionBanner(
+                        icon = R.drawable.ic_cloud_off,
+                        text = stringResource(R.string.my_trips_error_title),
+                        modifier = Modifier.padding(top = 16.dp),
+                        action = stringResource(R.string.my_trips_retry),
+                        onAction = onRetryMore,
+                    )
+                }
             }
         }
     }
@@ -162,11 +169,11 @@ private fun Trips(
 
 /** A refresh that failed, over the list it left as it was. */
 @Composable
-private fun RefreshFailed(onRefresh: () -> Unit) {
+private fun RefreshFailed(onRefresh: () -> Unit, modifier: Modifier = Modifier) {
     AttentionBanner(
         icon = R.drawable.ic_cloud_off,
         text = stringResource(R.string.my_trips_error_title),
-        modifier = Modifier.padding(top = 8.dp),
+        modifier = modifier.padding(top = 8.dp),
         action = stringResource(R.string.my_trips_retry),
         onAction = onRefresh,
     )
