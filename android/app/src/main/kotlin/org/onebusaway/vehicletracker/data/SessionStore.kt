@@ -142,8 +142,11 @@ interface SessionStore {
      */
     suspend fun saveRefreshed(tokens: IssuedTokens, spentRefreshToken: String)
 
-    /** Forgets the refresh token and keeps the access token, which works until it expires. */
-    suspend fun dropRefreshToken()
+    /**
+     * Forgets the refresh token [spent] and keeps the access token, which works until it expires. It removes nothing
+     * when another refresh token is stored: a sign-in or a refresh saved it after [spent] was read, and it is theirs.
+     */
+    suspend fun dropRefreshToken(spent: String)
     suspend fun clearToken()
 
     /** Readies the phone for the next driver: the tokens and the email go, and the server stays. */
@@ -308,8 +311,9 @@ class EncryptedSessionStore(
         }
     }
 
-    override suspend fun dropRefreshToken() {
-        dataStore.edit { prefs -> prefs.remove(Keys.REFRESH_TOKEN) }
+    override suspend fun dropRefreshToken(spent: String) {
+        // Checked inside the transaction, as in save, so a sign-in can't land between the check and the removal.
+        dataStore.edit { prefs -> if (readRefreshToken(prefs) == spent) prefs.remove(Keys.REFRESH_TOKEN) }
     }
 
     override suspend fun clearToken() {

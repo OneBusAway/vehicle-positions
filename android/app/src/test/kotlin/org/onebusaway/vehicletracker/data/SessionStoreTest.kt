@@ -97,9 +97,22 @@ class SessionStoreTest {
         val store = EncryptedSessionStore(newDataStore(), FakeCryptor())
         store.saveLogin(SERVER, EMAIL, TOKENS)
 
-        store.dropRefreshToken()
+        store.dropRefreshToken(spent = REFRESH_TOKEN)
 
         assertEquals(SIGNED_IN.copy(refreshToken = null), store.session.first())
+    }
+
+    // A refused refresh drops the token it spent. A sign-in saved since is another session, with its own.
+    @Test fun `a new sign-in's refresh token survives dropping the old one`() = runTest {
+        val store = EncryptedSessionStore(newDataStore(), FakeCryptor())
+        store.saveLogin(SERVER, EMAIL, TOKENS)
+        val next = IssuedTokens("b1", "rb1", ISSUED_AT + 2000, ISSUED_AT + 1100)
+        store.saveLogin(SERVER, "next@example.com", next)
+
+        store.dropRefreshToken(spent = REFRESH_TOKEN)
+
+        assertEquals("rb1", store.session.first().refreshToken)
+        assertEquals("b1", store.session.first().token)
     }
 
     @Test fun `clearing the token removes both tokens and their times, and keeps the server url and the email`() = runTest {

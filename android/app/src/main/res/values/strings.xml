@@ -250,6 +250,34 @@
     <!-- The notice's buttons. Agree is the only way to agree; Not now asks for nothing, and the notice shows again next time. -->
     <string name="location_notice_agree">Agree</string>
     <string name="location_notice_not_now">Not now</string>
+    <!-- Settings: the heading over the rows about the driver's account, such as Change password. -->
+    <string name="settings_group_account">Account</string>
+    <!-- Change password, opened from Settings, Account. The row, the title of its page and the button at its foot, which changes the driver's password. -->
+    <string name="change_password_title">Change password</string>
+    <!-- Change password's three fields: the password the driver signs in with now, then the new one, typed twice to catch a slip. -->
+    <string name="change_password_current">Current password</string>
+    <string name="change_password_new">New password</string>
+    <string name="change_password_again">New password again</string>
+    <!-- Change password: under New password, what a password needs. -->
+    <string name="change_password_rule">At least 8 characters</string>
+    <!-- Change password: under the fields, what a change does to the driver's other sign-ins. -->
+    <string name="change_password_others">Other phones signed in as you are signed out. This one stays signed in.</string>
+    <!-- Change password: what is wrong, under the field it is about. The new password must be 8 characters at least, and at most 72 bytes, which the server takes. -->
+    <string name="change_password_wrong_current">That\'s not your current password.</string>
+    <string name="change_password_too_short">Use at least 8 characters.</string>
+    <string name="change_password_too_long">Use a shorter password.</string>
+    <string name="change_password_no_match">The two new passwords don\'t match.</string>
+    <!-- Change password: the button while the change is with the server, beside a spinner. -->
+    <string name="change_password_changing">Changing password</string>
+    <!-- Change password: banner when nothing answered. The server's address as the driver knows it, e.g. "Can't reach tracker.example.org. Check your connection." -->
+    <string name="change_password_unreachable">Can\'t reach %1$s. Check your connection.</string>
+    <!-- Change password: the same banner, when the phone can't tell which server it is. -->
+    <string name="change_password_unreachable_server">Can\'t reach the server. Check your connection.</string>
+    <!-- Change password: banners when the server is a version from before drivers could change their password, and when it answered with an error the driver can do nothing about but try again. -->
+    <string name="change_password_older_server">Your agency\'s server can\'t change passwords yet.</string>
+    <string name="change_password_failed">Couldn\'t change your password. Try again.</string>
+    <!-- Settings: a message along the bottom once the driver's password was changed: the other phones signed in as them were signed out. -->
+    <string name="change_password_changed">Password changed. Other phones were signed out.</string>
     <!-- Permission check, opened from Settings: a page with each thing the app needs, as on Before you start, and what fixes one that is missing. The same words name its row in Settings, and what a tap on the top of Settings does for TalkBack. -->
     <string name="permission_check_title">Permission check</string>
     <string name="permission_check_intro">What the app needs to report your vehicle.</string>

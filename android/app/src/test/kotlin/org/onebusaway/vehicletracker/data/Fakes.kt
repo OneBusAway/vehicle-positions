@@ -92,7 +92,10 @@ class FakeSessionStore : SessionStore {
             accessExpiresAtEpochSec = tokens.accessExpiresAtEpochSec,
         )
     }
-    override suspend fun dropRefreshToken() { state.value = state.value.copy(refreshToken = null) }
+    /** Removes only [spent], as [EncryptedSessionStore] does. */
+    override suspend fun dropRefreshToken(spent: String) {
+        if (state.value.refreshToken == spent) state.value = state.value.copy(refreshToken = null)
+    }
     override suspend fun clearToken() {
         clearFailure?.let { throw it }
         state.value = state.value.copy(token = null, issuedAtEpochSec = null, refreshToken = null, accessExpiresAtEpochSec = null)

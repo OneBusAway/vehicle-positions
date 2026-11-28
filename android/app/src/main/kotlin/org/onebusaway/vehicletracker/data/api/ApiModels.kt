@@ -19,6 +19,13 @@ import org.onebusaway.vehicletracker.data.OccupancyStatus
 
 @Serializable data class RefreshRequest(@SerialName("refresh_token") val refreshToken: String)
 
+/** `POST /api/v1/auth/password`. The refresh token is this phone's: the server keeps it good while it ends every other sign-in. */
+@Serializable data class ChangePasswordRequest(
+    @SerialName("current_password") val currentPassword: String,
+    @SerialName("new_password") val newPassword: String,
+    @SerialName("refresh_token") val refreshToken: String,
+)
+
 @Serializable data class VehicleDto(val id: String, val label: String)
 
 @Serializable data class StartTripRequest(

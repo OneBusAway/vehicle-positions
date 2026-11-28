@@ -105,7 +105,7 @@ private class SignedIn(email: String) : SessionStore {
     override val session = MutableStateFlow(Session(SERVER, "jwt", issuedAtEpochSec = 0L, email = email))
     override suspend fun saveLogin(serverUrl: String, email: String, tokens: IssuedTokens) = Unit
     override suspend fun saveRefreshed(tokens: IssuedTokens, spentRefreshToken: String) = Unit
-    override suspend fun dropRefreshToken() = Unit
+    override suspend fun dropRefreshToken(spent: String) = Unit
     override suspend fun clearToken() = Unit
     override suspend fun clearTokenAndEmail() = Unit
 }
