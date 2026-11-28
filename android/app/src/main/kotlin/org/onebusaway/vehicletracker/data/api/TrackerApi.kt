@@ -5,12 +5,14 @@ import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.Path
+import retrofit2.http.Query
 
 interface TrackerApi {
     @POST("api/v1/auth/login") suspend fun login(@Body body: LoginRequest): LoginResponse
     @POST("api/v1/auth/logout") suspend fun logout()
     @POST("api/v1/auth/password") suspend fun changePassword(@Body body: ChangePasswordRequest)
     @GET("api/v1/vehicles") suspend fun myVehicles(): List<VehicleDto>
+    @GET("api/v1/trips") suspend fun myTrips(@Query("limit") limit: Int, @Query("offset") offset: Int): MyTripsPageDto
     @POST("api/v1/trips/start") suspend fun startTrip(@Body body: StartTripRequest): TripDto
     @POST("api/v1/trips/end") suspend fun endTrip(@Body body: EndTripRequest)
     @POST("api/v1/locations") suspend fun postLocation(@Body body: LocationReportDto)

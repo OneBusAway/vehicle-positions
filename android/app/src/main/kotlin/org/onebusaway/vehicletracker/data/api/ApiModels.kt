@@ -43,6 +43,35 @@ import org.onebusaway.vehicletracker.data.OccupancyStatus
 
 @Serializable data class EndTripRequest(@SerialName("trip_id") val tripId: Long)
 
+/** A page of the driver's own trips (`GET /api/v1/trips`), newest first, the running one included. */
+@Serializable data class MyTripsPageDto(
+    @SerialName("has_more") val hasMore: Boolean,
+    val trips: List<MyTripDto>,
+)
+
+/** One of the driver's own trips. [route] and [headsign] are the schedule's as it is now. */
+@Serializable data class MyTripDto(
+    val id: Long,
+    @SerialName("vehicle_id") val vehicleId: String,
+    /** Empty for a trip started with its GTFS trip alone. */
+    @SerialName("route_id") val routeId: String,
+    /** Null when the schedule no longer has the trip's route. */
+    val route: MyTripRouteDto? = null,
+    /** Empty when the schedule gives none. */
+    val headsign: String = "",
+    /** RFC 3339 with an offset, as Go writes it: with as many fractional digits as it has. */
+    @SerialName("start_time") val startTime: String,
+    /** Left out while the trip runs. */
+    @SerialName("end_time") val endTime: String? = null,
+)
+
+@Serializable data class MyTripRouteDto(
+    @SerialName("short_name") val shortName: String,
+    @SerialName("long_name") val longName: String,
+    val color: String,
+    @SerialName("text_color") val textColor: String,
+)
+
 /** Where the agency's offline street map is; [pmtilesUrl] is null when the agency has none. */
 @Serializable data class MapConfigDto(@SerialName("pmtiles_url") val pmtilesUrl: String? = null)
 

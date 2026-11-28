@@ -44,9 +44,12 @@ internal fun Modifier.groupRow(place: GroupPlace): Modifier {
 
 /** The title over a group of rows. */
 @Composable
-internal fun GroupTitle(@StringRes title: Int) {
+internal fun GroupTitle(@StringRes title: Int) = GroupTitle(stringResource(title))
+
+@Composable
+internal fun GroupTitle(title: String) {
     Text(
-        text = stringResource(title),
+        text = title,
         style = MaterialTheme.typography.titleSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier

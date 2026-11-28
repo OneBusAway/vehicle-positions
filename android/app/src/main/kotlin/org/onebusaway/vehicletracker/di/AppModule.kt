@@ -33,6 +33,8 @@ import org.onebusaway.vehicletracker.data.FileTripGeometryStore
 import org.onebusaway.vehicletracker.data.KeystoreCryptor
 import org.onebusaway.vehicletracker.data.LocationNoticeStore
 import org.onebusaway.vehicletracker.data.ManagedServerSource
+import org.onebusaway.vehicletracker.data.MyTripsRepository
+import org.onebusaway.vehicletracker.data.MyTripsSource
 import org.onebusaway.vehicletracker.data.OfflineFixQueue
 import org.onebusaway.vehicletracker.data.PasswordChanger
 import org.onebusaway.vehicletracker.data.PasswordRepository
@@ -292,6 +294,9 @@ object AppModule {
 
     @Provides
     fun providePasswordChanger(repository: PasswordRepository): PasswordChanger = repository
+
+    @Provides
+    fun provideMyTripsSource(repository: MyTripsRepository): MyTripsSource = repository
 
     /**
      * A lazy accessor for repositories (`VehicleRepository`, `TripRepository`) that must not

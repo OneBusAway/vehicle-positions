@@ -252,6 +252,20 @@
     <string name="location_notice_not_now">Not now</string>
     <!-- Settings: the heading over the rows about the driver's account, such as Change password. -->
     <string name="settings_group_account">Account</string>
+    <!-- My trips, opened from Settings, Account: the row, and the title of its page, which lists the trips the driver has made. -->
+    <string name="my_trips_title">My trips</string>
+    <!-- My trips: the titles over the trips that started today, and yesterday. Older days show their date. -->
+    <string name="my_trips_today">Today</string>
+    <string name="my_trips_yesterday">Yesterday</string>
+    <!-- My trips: under where a trip went, when it started and ended, then the fleet number of its vehicle, e.g. "7:13 AM to 8:02 AM · Vehicle 4317". -->
+    <string name="my_trips_times">%1$s to %2$s · Vehicle %3$s</string>
+    <!-- My trips, when the driver has ended no trip yet: the title, then the line under it. -->
+    <string name="my_trips_empty_title">No trips yet</string>
+    <string name="my_trips_empty_detail">A trip shows here after you end it.</string>
+    <!-- My trips, when the list could not be loaded: the title (also the banner when a refresh or the next page failed), the line under it, and the button. -->
+    <string name="my_trips_error_title">Couldn\'t load your trips</string>
+    <string name="my_trips_error_detail">Check your connection and try again.</string>
+    <string name="my_trips_retry">Try again</string>
     <!-- Change password, opened from Settings, Account. The row, the title of its page and the button at its foot, which changes the driver's password. -->
     <string name="change_password_title">Change password</string>
     <!-- Change password's three fields: the password the driver signs in with now, then the new one, typed twice to catch a slip. -->

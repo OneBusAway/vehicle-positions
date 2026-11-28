@@ -109,6 +109,7 @@ class SettingsScreenTest {
         var permissionCheck = 0
         var tripSettings = 0
         var offlineMap = 0
+        var myTrips = 0
         var changePassword = 0
         var signOuts = 0
         var signedOut = 0
@@ -149,6 +150,7 @@ class SettingsScreenTest {
                 onPermissionCheck = { calls.permissionCheck++ },
                 onTripSettings = { calls.tripSettings++ },
                 onOfflineMap = { calls.offlineMap++ },
+                onMyTrips = { calls.myTrips++ },
                 onChangePassword = { calls.changePassword++ },
                 onSignOut = { calls.signOuts++ },
                 onSignedOut = { calls.signedOut++ },
@@ -268,6 +270,16 @@ class SettingsScreenTest {
         assertFalse("nor Settings under it", settingsRead())
         val notices = SemanticsMatcher.expectValue(SemanticsProperties.IsTraversalGroup, true) and hasAnyDescendant(hasText(string(R.string.location_notice_title)))
         assertTrue("the notice is a traversal group of its own", compose.onAllNodes(notices).fetchSemanticsNodes().isNotEmpty())
+    }
+
+    @Test
+    fun theAccountRowsOpenMyTripsAndChangePassword() {
+        compose.setContent { Content() }
+
+        compose.onNode(hasText(string(R.string.my_trips_title)) and hasClickAction()).performScrollTo().performClick()
+
+        assertEquals(1, calls.myTrips)
+        assertEquals(0, calls.changePassword)
     }
 
     @Test
