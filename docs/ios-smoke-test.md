@@ -821,6 +821,43 @@ OTHER_REFRESH=$(curl -s -X POST "$BASE/api/v1/auth/login" \
 4. Put the password back for the other checks: change it again from
    `newpass123` to `driverpass123`.
 
+### Check 6d: My trips
+
+Run this after Check 5, so the driver has ended a trip or two.
+
+1. Open **Settings** from the account button and tap **My trips**, under
+   **Account**.
+
+   **Expected outcome:** the trips ended in the checks before, newest first
+   under **Today**. Each row has the route's badge, the headsign, and when it
+   started and ended in the phone's time zone with the vehicle, as "8:00 AM to
+   8:10 AM · Vehicle bus-1". A tap on a row opens nothing, and a trip still
+   running is not listed.
+
+2. Give the driver more than a page of trips, each started and ended at once,
+   with `login` from Check 5b, then pull the list down:
+
+   ```bash
+   DRIVER_TOKEN=$(login driver@example.com driverpass123)
+   for i in $(seq 60); do
+     ID=$(curl -s -X POST "$BASE/api/v1/trips/start" -H "Authorization: Bearer $DRIVER_TOKEN" \
+       -H 'Content-Type: application/json' -d '{"vehicle_id":"bus-1","route_id":"R1","gtfs_trip_id":"T1"}' \
+       | python3 -c 'import sys,json;print(json.load(sys.stdin)["id"])')
+     curl -s -o /dev/null -X POST "$BASE/api/v1/trips/end" -H "Authorization: Bearer $DRIVER_TOKEN" \
+       -H 'Content-Type: application/json' -d "{\"trip_id\":$ID}"
+   done
+   ```
+
+   **Expected outcome:** the 60 new trips on top. Scroll to the end: a spinner,
+   then the rest, with no trip twice. The server log shows two
+   `GET /api/v1/trips`, the second as the list reached its end.
+
+3. Stop the server as in Check 3 and pull the list down.
+
+   **Expected outcome:** "Couldn't load your trips" with **Try again** over
+   the list, which stays. Start the server again and tap **Try again**: the
+   banner goes.
+
 ## CarPlay
 
 **Not yet run on this machine.** The steps and expected results below are

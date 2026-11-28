@@ -255,6 +255,55 @@ nonisolated struct AgencyInfo: Sendable, Decodable, Equatable {
     }
 }
 
+/// A page of the driver's own trips (`GET /api/v1/trips`), newest first.
+nonisolated struct MyTripsPage: Sendable, Decodable, Equatable {
+    var hasMore: Bool
+    var trips: [MyTrip]
+
+    private enum CodingKeys: String, CodingKey {
+        case trips
+        case hasMore = "has_more"
+    }
+}
+
+/// One of the driver's own trips, as much of it as My trips shows. `route`
+/// and `headsign` are the schedule's as it is now, so a trip keeps them only
+/// while the schedule still has its route and its trip.
+nonisolated struct MyTrip: Sendable, Decodable, Equatable, Identifiable {
+    var id: Int64
+    var vehicleID: String
+    /// Empty for a trip started with its GTFS trip alone.
+    var routeID: String
+    var route: Route?
+    /// Empty when the schedule gives none.
+    var headsign: String
+    var startTime: Date
+    /// Nil while the trip runs.
+    var endTime: Date?
+
+    nonisolated struct Route: Sendable, Decodable, Equatable {
+        var shortName: String
+        var longName: String
+        var color: String
+        var textColor: String
+
+        private enum CodingKeys: String, CodingKey {
+            case color
+            case shortName = "short_name"
+            case longName = "long_name"
+            case textColor = "text_color"
+        }
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, route, headsign
+        case vehicleID = "vehicle_id"
+        case routeID = "route_id"
+        case startTime = "start_time"
+        case endTime = "end_time"
+    }
+}
+
 /// Why a request failed. The screens say each failure in their own sentence
 /// (`SignInForm`, `PickerLoad`, `StartRefusal`); the description is the
 /// app's words for any other place, in the driver's language. It never

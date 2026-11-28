@@ -458,6 +458,17 @@ final class TripSession {
         }
     }
 
+    /// A page of the driver's own trips, for My trips. A 401 is the caller's,
+    /// as for the pickers' loads (`handleIfUnauthorized`).
+    func myTrips(limit: Int, offset: Int) async throws -> MyTripsPage {
+        do {
+            return try await requireAPI().myTrips(limit: limit, offset: offset)
+        } catch {
+            log.error("could not load the driver's trips from \(offset): \(String(describing: error), privacy: .public)")
+            throw error
+        }
+    }
+
     // MARK: Trip lifecycle
 
     func start(vehicle: Vehicle, tripID: String) async throws {

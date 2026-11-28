@@ -46,6 +46,12 @@ nonisolated final class TrackerClient: TrackerAPI, Sendable {
         try decode([Vehicle].self, try await send("GET", "api/v1/vehicles"))
     }
 
+    func myTrips(limit: Int, offset: Int) async throws -> MyTripsPage {
+        let url = baseURL.appending(path: "api/v1/trips")
+            .appending(queryItems: [URLQueryItem(name: "limit", value: String(limit)), URLQueryItem(name: "offset", value: String(offset))])
+        return try decode(MyTripsPage.self, try await send("GET", url))
+    }
+
     func routes() async throws -> [RouteInfo] {
         try decode(RoutesResponse.self, try await send("GET", "api/v1/gtfs/routes")).routes
     }

@@ -53,6 +53,11 @@ struct SettingsView: View {
                         ThemeSettingsRow()
                     }
                     SettingsGroup(title: SettingsText.accountSection) {
+                        NavigationLink(value: PickerRoute.myTrips) {
+                            SettingsRow(symbol: "clock.arrow.circlepath", title: MyTripsText.title, end: .opens)
+                        }
+                        .buttonStyle(SettingsRowStyle())
+                        SettingsDivider()
                         NavigationLink(value: PickerRoute.changePassword) {
                             SettingsRow(symbol: "key", title: ChangePasswordText.title, end: .opens)
                         }
