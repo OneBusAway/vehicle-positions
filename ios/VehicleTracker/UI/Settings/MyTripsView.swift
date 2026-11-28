@@ -51,25 +51,29 @@ struct MyTripsView: View {
     }
 
     private var trips: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                if list.refreshFailed { refreshBanner }
-                ForEach(Array(MyTripsDay.of(list.trips, now: .now).enumerated()), id: \.element.id) { index, day in
-                    SettingsGroupTitle(title: day.title)
-                        .padding(.top, index == 0 ? 8 : 28)
-                    VStack(spacing: 0) {
-                        ForEach(Array(day.trips.enumerated()), id: \.element.id) { index, trip in
-                            if index > 0 { Divider().padding(.leading, 16) }
-                            TripRow(row: MyTripRow(trip))
+        // Today becomes Yesterday on a page left open past midnight. Around
+        // the whole list, so its rows stay lazy.
+        TimelineView(EachMidnight()) { context in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    if list.refreshFailed { refreshBanner }
+                    ForEach(Array(MyTripsDay.of(list.trips, now: context.date).enumerated()), id: \.element.id) { index, day in
+                        SettingsGroupTitle(title: day.title)
+                            .padding(.top, index == 0 ? 8 : 28)
+                        VStack(spacing: 0) {
+                            ForEach(Array(day.trips.enumerated()), id: \.element.id) { index, trip in
+                                if index > 0 { Divider().padding(.leading, 16) }
+                                TripRow(row: MyTripRow(trip))
+                            }
                         }
+                        .settingsCard()
                     }
-                    .settingsCard()
+                    end
                 }
-                end
+                .padding(EdgeInsets(top: 0, leading: 16, bottom: 32, trailing: 16))
             }
-            .padding(EdgeInsets(top: 0, leading: 16, bottom: 32, trailing: 16))
+            .refreshable { await refresh.run(loadFirst) }
         }
-        .refreshable { await refresh.run(loadFirst) }
     }
 
     /// The pickers' spinner while another page loads, as the list reaches it.
@@ -113,6 +117,20 @@ struct MyTripsView: View {
             guard !Task.isCancelled else { return }
             guard !session.handleIfUnauthorized(error) else { return }
             list.failed(page)
+        }
+    }
+}
+
+/// When My trips' day titles are worked out: as the list shows, then at the
+/// start of each day after, in the phone's time zone.
+nonisolated struct EachMidnight: TimelineSchedule {
+    var calendar: Calendar = .current
+
+    func entries(from startDate: Date, mode: TimelineScheduleMode) -> UnfoldFirstSequence<Date> {
+        // A day on, then back to that day's start, which is 1:00 on a day
+        // whose clocks skip midnight.
+        sequence(first: startDate) { [calendar] date in
+            calendar.date(byAdding: .day, value: 1, to: date).map { calendar.startOfDay(for: $0) }
         }
     }
 }

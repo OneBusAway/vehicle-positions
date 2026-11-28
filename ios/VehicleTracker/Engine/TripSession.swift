@@ -459,12 +459,15 @@ final class TripSession {
     }
 
     /// A page of the driver's own trips, for My trips. A 401 is the caller's,
-    /// as for the pickers' loads (`handleIfUnauthorized`).
+    /// as for the pickers' loads (`handleIfUnauthorized`). A load cancelled
+    /// because the driver left the page didn't fail, so it isn't logged.
     func myTrips(limit: Int, offset: Int) async throws -> MyTripsPage {
         do {
             return try await requireAPI().myTrips(limit: limit, offset: offset)
         } catch {
-            log.error("could not load the driver's trips from \(offset): \(String(describing: error), privacy: .public)")
+            if !Task.isCancelled {
+                log.error("could not load the driver's trips from \(offset): \(String(describing: error), privacy: .public)")
+            }
             throw error
         }
     }
