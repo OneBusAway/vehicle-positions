@@ -2770,8 +2770,8 @@ type UpdateUserRow struct {
 // already ended later, so giving the old role back later cannot revive them.
 // ended_at is read under GetUserForUpdate's lock from the clock tokens are
 // issued by (Store.now), so a sign-in or refresh it waited for is before it.
-// The role read in the CASE is the row's value before this update. The email is stored lower-case, as CreateUser
-// stores it.
+// The role read in the CASE is the row's value before this update. The email
+// is stored lower-case, as CreateUser stores it.
 func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (UpdateUserRow, error) {
 	row := q.db.QueryRow(ctx, updateUser,
 		arg.Name,
