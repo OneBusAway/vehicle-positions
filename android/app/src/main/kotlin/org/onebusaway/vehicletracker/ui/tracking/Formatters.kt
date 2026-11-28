@@ -48,7 +48,9 @@ internal fun adherenceTone(adherence: Adherence): StatusTone = when (adherence.s
  */
 internal fun vehicleTone(adherence: Adherence?, problem: TrackingProblem): StatusTone = when (problem) {
     TrackingProblem.NO_GPS, TrackingProblem.AUTH_EXPIRED -> StatusTone.NEUTRAL
-    TrackingProblem.NONE, TrackingProblem.NO_NETWORK, TrackingProblem.CLOCK_SKEW, TrackingProblem.REPORTS_REFUSED ->
+    TrackingProblem.NONE, TrackingProblem.NO_NETWORK, TrackingProblem.CLOCK_SKEW, TrackingProblem.REPORTS_REFUSED,
+    TrackingProblem.SERVER_ERROR,
+    ->
         adherence?.let(::adherenceTone) ?: StatusTone.NEUTRAL
 }
 

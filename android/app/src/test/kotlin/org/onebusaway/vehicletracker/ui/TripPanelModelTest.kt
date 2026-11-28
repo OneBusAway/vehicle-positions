@@ -130,6 +130,8 @@ class TripPanelModelTest {
         assertEquals(Reporting.STOPPED, reporting(TrackingProblem.AUTH_EXPIRED))
         // Refused reports reach no rider either, until dispatch fixes the vehicle or the trip.
         assertEquals(Reporting.NOT_REPORTING, reporting(TrackingProblem.REPORTS_REFUSED))
+        // And so do the reports the server fails on.
+        assertEquals(Reporting.NOT_REPORTING, reporting(TrackingProblem.SERVER_ERROR))
         assertFalse(Reporting.REPORTING.isProblem)
         assertTrue(Reporting.entries.filter { it != Reporting.REPORTING }.all { it.isProblem })
     }

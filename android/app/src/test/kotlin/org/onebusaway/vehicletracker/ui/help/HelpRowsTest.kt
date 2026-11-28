@@ -109,7 +109,7 @@ class HelpRowsTest {
                 "status-WAITING_FOR_GPS", "status-NO_SCHEDULE", "status-REPORTS_WAITING", "status-REPORTS_WONT_SEND",
                 "section-PROBLEMS",
                 "problem-NO_CONNECTION", "problem-NO_GPS", "problem-CLOCK_WRONG", "problem-REPORTS_REFUSED",
-                "problem-SIGNED_OUT", "problem-REPORTS_PAUSED",
+                "problem-SERVER_ERROR", "problem-SIGNED_OUT", "problem-REPORTS_PAUSED",
             ),
             helpPage.map { it.key },
         )

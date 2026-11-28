@@ -214,15 +214,57 @@ class TripReporterTest {
         server.shutdown()
     }
 
-    @Test fun `HTTP 500 leaves status unchanged and does not increment counter`() = runTest {
+    // The phone is online and the server is not taking the reports, so the banner must not stay green while the
+    // vehicle is missing from the feed. It matches serverErrorsTurnTheBannerRed in the iOS LocationReporterTests.
+    @Test fun `a 5xx or a 4xx nothing else covers sets SERVER_ERROR until a report is accepted`() = runTest {
+        for (code in listOf(500, 501, 400, 404, 410, 422)) {
+            val server = MockWebServer().apply { start() }
+            server.enqueue(MockResponse().setResponseCode(201).setBody("""{"status":"ok"}"""))
+            server.enqueue(MockResponse().setResponseCode(code).setBody("""{"error":"not for the driver to fix"}"""))
+            server.enqueue(MockResponse().setResponseCode(201).setBody("""{"status":"ok"}"""))
+            val (reporter, tracking) = reporterWith(server)
+
+            reporter.report(trip, fix())
+            assertEquals("HTTP $code", TrackingProblem.NONE, tracking.state.value.problem)
+
+            reporter.report(trip, fix())
+            assertEquals("HTTP $code", TrackingProblem.SERVER_ERROR, tracking.state.value.problem)
+            assertEquals("HTTP $code: a refused report is not counted as sent", 1, tracking.state.value.fixesSent)
+
+            reporter.report(trip, fix())
+            assertEquals("HTTP $code: the next accepted report clears it", TrackingProblem.NONE, tracking.state.value.problem)
+            assertEquals(2, tracking.state.value.fixesSent)
+            server.shutdown()
+        }
+    }
+
+    @Test fun `the statuses with a meaning of their own do not set SERVER_ERROR`() = runTest {
+        val cases = mapOf(
+            401 to TrackingProblem.AUTH_EXPIRED,
+            403 to TrackingProblem.REPORTS_REFUSED,
+            409 to TrackingProblem.REPORTS_REFUSED,
+            429 to TrackingProblem.NONE,
+        )
+        for ((code, expected) in cases) {
+            val server = MockWebServer().apply { start() }
+            server.enqueue(MockResponse().setResponseCode(code).setBody("""{"error":"x"}"""))
+            val (reporter, tracking) = reporterWith(server)
+
+            reporter.report(trip, fix())
+
+            assertEquals("HTTP $code", expected, tracking.state.value.problem)
+            server.shutdown()
+        }
+    }
+
+    @Test fun `a timestamp 400 is not a server error until it sets CLOCK_SKEW`() = runTest {
         val server = MockWebServer().apply { start() }
-        server.enqueue(MockResponse().setResponseCode(500).setBody("""{"error":"internal error"}"""))
+        server.enqueue(MockResponse().setResponseCode(400).setBody("""{"error":"timestamp must be within 5 minutes of server time"}"""))
         val (reporter, tracking) = reporterWith(server)
 
         reporter.report(trip, fix())
 
         assertEquals(TrackingProblem.NONE, tracking.state.value.problem)
-        assertEquals(0, tracking.state.value.fixesSent)
         server.shutdown()
     }
 
@@ -245,14 +287,14 @@ class TripReporterTest {
         }
     }
 
-    @Test fun `400 without timestamp in body leaves status unchanged and does not increment counter`() = runTest {
+    @Test fun `400 without timestamp in body sets SERVER_ERROR and does not increment counter`() = runTest {
         val server = MockWebServer().apply { start() }
         server.enqueue(MockResponse().setResponseCode(400).setBody("""{"error":"invalid vehicle_id"}"""))
         val (reporter, tracking) = reporterWith(server)
 
         reporter.report(trip, fix())
 
-        assertEquals(TrackingProblem.NONE, tracking.state.value.problem)
+        assertEquals(TrackingProblem.SERVER_ERROR, tracking.state.value.problem)
         assertEquals(0, tracking.state.value.fixesSent)
         server.shutdown()
     }
@@ -448,7 +490,7 @@ class TripReporterTest {
             assertEquals("HTTP $code", listOf(1000L, 1010L), queue.queued.map { it.timestamp })
             assertEquals("HTTP $code", 2, scheduler.scheduled)
             assertEquals("HTTP $code", 0, tracking.state.value.fixesSent)
-            assertEquals("HTTP $code: the status stays as it was", TrackingProblem.NONE, tracking.state.value.problem)
+            assertEquals("HTTP $code: it is a server error, though the report is kept", TrackingProblem.SERVER_ERROR, tracking.state.value.problem)
 
             reporter.report(trip, fix(ts = 1020L))
             assertEquals("HTTP $code", 4, server.requestCount)

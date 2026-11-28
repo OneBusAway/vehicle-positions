@@ -91,6 +91,7 @@ class FormattersTest {
             TrackingProblem.NO_NETWORK to StatusTone.LATE,
             TrackingProblem.CLOCK_SKEW to StatusTone.LATE,
             TrackingProblem.REPORTS_REFUSED to StatusTone.LATE,
+            TrackingProblem.SERVER_ERROR to StatusTone.LATE,
             TrackingProblem.NONE to StatusTone.LATE,
         )
         assertEquals("every problem is in the table", TrackingProblem.entries.toSet(), cases.map { it.first }.toSet())

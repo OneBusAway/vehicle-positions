@@ -35,7 +35,7 @@ private const val CLOCK_SKEW_THRESHOLD = 3
  * What the proxy in front of the server (docs/deployment.md, section 7) answers when the server is down or too slow:
  * the server never sends these on this endpoint itself. The report is kept, as one that fails for want of a
  * connection is: the server didn't take it, or took it without the phone hearing so, and the history upload is
- * stored once.
+ * stored once. The driver is told it is a server error all the same.
  */
 private val SERVER_UNREACHABLE = setOf(502, 503, 504)
 
@@ -182,12 +182,18 @@ class TripReporter @Inject constructor(
                         refreshProblem(sendProblem = TrackingProblem.CLOCK_SKEW)
                     }
                 }
-                // Not NO_NETWORK: the phone is online. The status stays as it is, as for any other server error.
+                // Not NO_NETWORK: the phone is online. It is a server error, as for any other 5xx.
                 e.code() in SERVER_UNREACHABLE -> {
                     AppLog.w(TAG, "Queueing location report for history after HTTP ${e.code()} from the proxy", e)
                     keepForHistory(dto)
+                    refreshProblem(sendProblem = TrackingProblem.SERVER_ERROR)
                 }
-                else -> AppLog.w(TAG, "Dropping location report after HTTP ${e.code()}", e) // other 4xx/5xx: log-and-drop per spec, keep current status
+                // Any other 5xx, or a 4xx nothing above covers: the report is dropped, and until one is taken the
+                // vehicle is missing from the feed, so say so rather than look healthy.
+                else -> {
+                    AppLog.w(TAG, "Dropping location report after HTTP ${e.code()}", e)
+                    refreshProblem(sendProblem = TrackingProblem.SERVER_ERROR)
+                }
             }
             return false
         } catch (e: IOException) {
