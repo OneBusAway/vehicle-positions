@@ -2,12 +2,18 @@ import SwiftUI
 
 /// How full the vehicle is, as four buttons at the top of the pulled-up trip
 /// sheet, big enough to hit at a stop. Tapping the selected one clears it.
-/// VoiceOver reads the row as one choice, adjusted by swiping up and down.
+/// VoiceOver, which moves one element at a time, reads the row as one choice,
+/// adjusted by swiping up and down. Voice Control, Switch Control and Full
+/// Keyboard Access pick from what is on screen, so without VoiceOver the four
+/// buttons stay apart, each named by its words: "Tap Full" chooses Full.
 struct OccupancyRow: View {
     let trip: TripGeometry
     var choice = OccupancyChoice.shared
+    /// Set by tests; the app reads whether VoiceOver is running.
+    var voiceOver: Bool?
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverRunning
 
     var body: some View {
         let selected = choice.occupancy(tripID: trip.id, serviceDate: trip.serviceDate)
@@ -32,18 +38,35 @@ struct OccupancyRow: View {
         .padding(.horizontal, 16)
         .padding(.top, 4)
         .padding(.bottom, 8)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(OccupancyText.title)
-        .accessibilityValue(OccupancyText.value(selected))
-        .accessibilityAdjustableAction { direction in
-            choice.set(Occupancy.stepped(selected, up: direction == .increment), tripID: trip.id, serviceDate: trip.serviceDate)
-        }
+        .modifier(OneAdjustableChoice(isOn: voiceOver ?? voiceOverRunning, value: OccupancyText.value(selected)) { up in
+            choice.set(Occupancy.stepped(selected, up: up), tripID: trip.id, serviceDate: trip.serviceDate)
+        })
         .sensoryFeedback(.selection, trigger: selected)
     }
 
     private var rows: [[Occupancy]] {
         let all = Occupancy.allCases
         return dynamicTypeSize.isAccessibilitySize ? [Array(all[0..<2]), Array(all[2...])] : [all]
+    }
+}
+
+/// The row as VoiceOver reads it, while `isOn`: one element, the question with
+/// the choice as its value, stepped by swiping up and down.
+private struct OneAdjustableChoice: ViewModifier {
+    let isOn: Bool
+    let value: String
+    let step: (_ up: Bool) -> Void
+
+    func body(content: Content) -> some View {
+        if isOn {
+            content
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(OccupancyText.title)
+                .accessibilityValue(value)
+                .accessibilityAdjustableAction { direction in step(direction == .increment) }
+        } else {
+            content
+        }
     }
 }
 
@@ -75,6 +98,7 @@ private struct OccupancyButton: View {
             .contentShape(Self.shape)
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     private static let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
