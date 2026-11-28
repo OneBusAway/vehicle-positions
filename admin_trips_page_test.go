@@ -184,4 +184,5 @@ func TestTripDetailPage_WorksWithoutTheScript(t *testing.T) {
 	}
 	assert.Contains(t, body, `<input type="range" id="trip-slider" min="0" max="0" step="1" value="0" disabled aria-label="Report shown on the map">`)
 	assert.Contains(t, body, `<script src="`+assetURL(t, "vendor/leaflet/leaflet.js")+`" defer></script>`)
+	assert.Contains(t, body, `<link rel="preconnect" href="https://tile.openstreetmap.org">`, "the replay's map has its tile server connected early, as the live map does")
 }

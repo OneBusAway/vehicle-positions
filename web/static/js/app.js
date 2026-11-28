@@ -192,7 +192,7 @@
     $("p", dlg).textContent = f.dataset.confirmText || "";
     var yes = $("[data-yes]", dlg);
     yes.textContent = f.dataset.confirmOk || "OK";
-    yes.onclick = function () { dlg.close(); f.submit(); };
+    yes.onclick = function () { dlg.close(); VT.going(); f.submit(); };
     dlg.showModal();
   });
 
@@ -220,6 +220,53 @@
       if (ev.dataTransfer.files.length) $("input", d).files = ev.dataTransfer.files;
     });
   });
+
+  /* A page is fetched while the pointer rests on its link, so the click finds it there (Chrome and Edge;
+     other browsers load it at the click, as before). Chrome would keep that copy for five minutes, and a page
+     here shows what was true when it was fetched, so every ten seconds the rule comes out, which drops a copy
+     not yet used, and goes back in a moment later: put back at once, Chrome never sees it gone and keeps the
+     copy. The CSV template is a download, not a page. */
+  if (HTMLScriptElement.supports && HTMLScriptElement.supports("speculationrules")) {
+    var ahead = null;
+    var fetchAhead = function () {
+      ahead = document.createElement("script");
+      ahead.type = "speculationrules";
+      ahead.textContent = '{"prefetch":[{"where":{"and":[{"href_matches":"/admin/*"},{"not":{"href_matches":"/admin/*.csv"}}]},"eagerness":"moderate"}]}';
+      document.head.appendChild(ahead);
+    };
+    fetchAhead();
+    setInterval(function () { ahead.remove(); setTimeout(fetchAhead, 100); }, 10000);
+  }
+
+  /* A click on a link or a form's button is answered at once: it looks pressed, and a line runs along the top
+     if the next page has not come within 150 ms (the stylesheet holds the line back that long). The next page
+     replaces all of it; it is taken off here for a page brought back by Back, and after ten seconds when no
+     page came: a download, or a navigation that was stopped. */
+  var pressed = null, waited = 0;
+  function arrived() {
+    clearTimeout(waited);
+    if (pressed) pressed.classList.remove("going");
+    pressed = null;
+    document.documentElement.classList.remove("waiting");
+  }
+  VT.going = function (el) {
+    arrived();
+    pressed = el || null;
+    if (pressed) pressed.classList.add("going");
+    document.documentElement.classList.add("waiting");
+    waited = setTimeout(arrived, 10000);
+  };
+  document.addEventListener("click", function (ev) {
+    var a = ev.target.closest("a[href]");
+    /* Not a click that opens a new tab or window, and only a page of the admin: not a download, not a place
+       on this page. */
+    if (!a || ev.defaultPrevented || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
+    if (a.origin !== location.origin || !/^\/admin(\/|$)/.test(a.pathname) || /\.csv$/.test(a.pathname)) return;
+    if (a.hash && a.pathname === location.pathname && a.search === location.search) return;
+    VT.going(a);
+  });
+  document.addEventListener("submit", function (ev) { if (!ev.defaultPrevented) VT.going(ev.submitter); });
+  window.addEventListener("pageshow", arrived);
 
   /* Search: jump to a page, route, vehicle, driver or trip. "/" or Ctrl K opens it. Pages come from the
      menu, routes from the schedule (asked for once), the rest from the list endpoints as the term is typed. */
@@ -300,7 +347,7 @@
         q.setAttribute("aria-activedescendant", "palette-" + sel);
         $("#palette-" + sel).scrollIntoView({ block: "nearest" });
       }
-      if (ev.key === "Enter" && shown[sel]) location.href = shown[sel].h;
+      if (ev.key === "Enter" && shown[sel]) { VT.going($("#palette-" + sel)); location.href = shown[sel].h; }
     });
     pal.addEventListener("click", function (ev) { if (ev.target === pal) pal.close(); });
   }

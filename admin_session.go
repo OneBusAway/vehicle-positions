@@ -219,10 +219,12 @@ func setFlash(w http.ResponseWriter, code string) {
 }
 
 // takeFlash reads, clears, and resolves the flash cookie to its message. It
-// returns the zero flash when there is none to show.
+// returns the zero flash when there is none to show, and leaves the cookie
+// alone for a page fetched ahead of a click (fetchedAhead): that page may
+// never be shown, and the message would be spent on it.
 func takeFlash(w http.ResponseWriter, r *http.Request) flash {
 	c, err := r.Cookie(flashCookieName)
-	if err != nil || c.Value == "" {
+	if err != nil || c.Value == "" || fetchedAhead(r) {
 		return flash{}
 	}
 	http.SetCookie(w, &http.Cookie{
@@ -235,4 +237,13 @@ func takeFlash(w http.ResponseWriter, r *http.Request) flash {
 		return flash{}
 	}
 	return msg
+}
+
+// fetchedAhead reports whether the browser is fetching the page before the
+// admin has asked for it. The shell's script has Chrome fetch a page while the
+// pointer rests on its link (web/static/js/app.js), and Chrome marks such a
+// request Sec-Purpose: prefetch. The page is shown only if the link is then
+// followed, so rendering it must not use up anything meant to be seen once.
+func fetchedAhead(r *http.Request) bool {
+	return strings.HasPrefix(r.Header.Get("Sec-Purpose"), "prefetch")
 }

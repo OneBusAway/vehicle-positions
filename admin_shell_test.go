@@ -108,6 +108,24 @@ func TestShell_LeafletOnlyWhereThereIsAMap(t *testing.T) {
 	assert.Contains(t, withMap, `<script src="`+assetURL(t, "js/map.js")+`" defer></script>`)
 }
 
+// TestShell_MapPagesConnectToTheTileServerEarly: the map's tiles come from
+// another server, which the browser learns of only when the map script runs.
+// The live map names it in the page's head, so the connection is open by
+// then, and it must be the server the scripts take their tiles from.
+func TestShell_MapPagesConnectToTheTileServerEarly(t *testing.T) {
+	_, mux := newShellMux(t)
+	const early = `<link rel="preconnect" href="https://tile.openstreetmap.org">`
+
+	assert.Contains(t, getAdminPage(t, mux, "/admin/map"), early)
+	assert.NotContains(t, getAdminPage(t, mux, "/admin/vehicles"), "preconnect")
+
+	for _, name := range []string{"web/static/js/map.js", "web/static/js/trip_detail.js"} {
+		script, err := fs.ReadFile(files, name)
+		require.NoError(t, err)
+		assert.True(t, strings.Contains(string(script), `L.tileLayer("https://tile.openstreetmap.org/`), "%s takes its tiles from the server the page connects to", name)
+	}
+}
+
 // TestShell_GlideOnlyOnTheLiveMap: the live map glides each vehicle's marker
 // to its next place over the 10 s between polls. The trip page's replay marker
 // has the same veh-icon class and moves every frame, so a glide there leaves

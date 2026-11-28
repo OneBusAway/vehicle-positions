@@ -451,7 +451,7 @@ func TestStaticAssets_FileBudgets(t *testing.T) {
 		"css/admin.css":                14_700,
 		"fonts/google-sans-flex.woff2": 35_800,
 		"icons.svg":                    7_000,
-		"js/app.js":                    6_400,
+		"js/app.js":                    7_400,
 		"js/line.js":                   1_300,
 		"js/map.js":                    12_500,
 		"js/trip_detail.js":            6_800,

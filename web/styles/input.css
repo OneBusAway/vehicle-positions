@@ -55,6 +55,7 @@
   --veh-fill: #1f1f1f;
   --veh-ink: #ffffff;
   --scrim: rgb(0 0 0 / 0.4);
+  --pressed: rgb(31 31 31 / 0.1);
   --shadow-1: 0 1px 2px rgb(31 31 31 / 0.1), 0 1px 3px rgb(31 31 31 / 0.08);
   --shadow-2: 0 1px 2px rgb(31 31 31 / 0.16), 0 4px 14px rgb(31 31 31 / 0.12);
   --shadow-3: 0 2px 6px rgb(31 31 31 / 0.16), 0 12px 32px rgb(31 31 31 / 0.18);
@@ -115,6 +116,7 @@
     --veh-fill: #e3e3e3;
     --veh-ink: #1f1f1f;
     --scrim: rgb(0 0 0 / 0.6);
+    --pressed: rgb(255 255 255 / 0.12);
     --shadow-1: 0 1px 2px rgb(0 0 0 / 0.5);
     --shadow-2: 0 0 0 1px rgb(255 255 255 / 0.1), 0 1px 2px rgb(0 0 0 / 0.55), 0 6px 18px rgb(0 0 0 / 0.5);
     --shadow-3: 0 2px 6px rgb(0 0 0 / 0.6), 0 16px 40px rgb(0 0 0 / 0.6);
@@ -157,6 +159,7 @@
   --veh-fill: #e3e3e3;
   --veh-ink: #1f1f1f;
   --scrim: rgb(0 0 0 / 0.6);
+  --pressed: rgb(255 255 255 / 0.12);
   --shadow-1: 0 1px 2px rgb(0 0 0 / 0.5);
   --shadow-2: 0 0 0 1px rgb(255 255 255 / 0.1), 0 1px 2px rgb(0 0 0 / 0.55), 0 6px 18px rgb(0 0 0 / 0.5);
   --shadow-3: 0 2px 6px rgb(0 0 0 / 0.6), 0 16px 40px rgb(0 0 0 / 0.6);
@@ -219,6 +222,8 @@
 @keyframes grow-y { from { transform: scaleY(0); } }
 @keyframes grow-x { from { transform: scaleX(0); } }
 @keyframes tone { from { background-color: var(--selected); } }
+@keyframes wait-line { to { transform: scaleX(0.9); } }
+@keyframes wait-shown { to { transform: none; } }
 
 /* Rules one page owns. They come before the shared components, so a component wins a tie. */
 @layer components {
@@ -558,6 +563,9 @@
   }
   .rail-item:hover { background: var(--surface-2); text-decoration: none; }
   .rail-item[aria-current="page"] { background: var(--selected); color: var(--on-selected); }
+  /* A menu item just followed is the chosen one at once, before its page has come. */
+  .rail-item.going { background: var(--selected); color: var(--on-selected); }
+  .rail:has(.going) .rail-item[aria-current="page"]:not(.going) { background: transparent; color: var(--ink-2); }
   .rail-item .count { margin-left: auto; }
   .rail-foot { margin-top: auto; padding-top: 8px; }
   button.rail-item { border: 0; background: transparent; width: 100%; cursor: pointer; }
@@ -606,6 +614,14 @@
   }
   .btn:hover { text-decoration: none; background: color-mix(in srgb, var(--primary) 8%, transparent); }
   .btn:active { transform: scale(0.98); }
+  /* A link or button just followed stays pressed until its page comes: a tint laid over it, which reads on a
+     filled button and on a plain row alike. app.js puts .going on it and .waiting on the page, whose line
+     along the top is held back 150 ms: a page that comes sooner never shows one. */
+  .going { background-image: linear-gradient(var(--pressed), var(--pressed)); }
+  html.waiting::after { content: ""; position: fixed; z-index: 700; left: 0; top: 0; width: 100%; height: 3px; background: var(--primary); transform-origin: 0 50%; transform: scaleX(0); animation: wait-shown 1ms linear 150ms both; }
+  @media (prefers-reduced-motion: no-preference) {
+    html.waiting::after { animation: wait-line 8s var(--ease-emph) 150ms both; }
+  }
   .btn-primary { background: var(--primary); color: var(--on-primary); }
   .btn-primary:hover { background: color-mix(in srgb, var(--primary) 90%, var(--ink)); box-shadow: var(--shadow-1); }
   .btn-tonal { background: var(--selected); color: var(--on-selected); }
@@ -947,6 +963,10 @@
     .tabbar a:hover { text-decoration: none; }
     .tabbar a[aria-current="page"] { color: var(--on-selected); }
     .tabbar a[aria-current="page"] .icon-wrap { background: var(--selected); }
+    .tabbar a.going { color: var(--on-selected); background-image: none; }
+    .tabbar a.going .icon-wrap { background: var(--selected); }
+    .tabbar:has(.going) a[aria-current="page"]:not(.going) { color: var(--ink-2); }
+    .tabbar:has(.going) a[aria-current="page"]:not(.going) .icon-wrap { background: transparent; }
     .tabbar .icon-wrap { display: grid; place-items: center; width: 56px; height: 28px; border-radius: 14px; position: relative; }
     .tabbar .count { position: absolute; right: 4px; top: -4px; }
     .page-map { inset: 56px 0 64px 0; }
