@@ -6,11 +6,16 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
+import okio.Buffer
+import okio.GzipSink
+import okio.buffer
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
+import org.onebusaway.vehicletracker.engine.TripFixtures
 import retrofit2.HttpException
 
 class TrackerApiTest {
@@ -162,4 +167,43 @@ class TrackerApiTest {
 
         assertEquals("/api/v1/vehicles", server.takeRequest().path)
     }
+
+    // Since #692 the server gzips what it sends from /api/v1/gtfs/ and gives it an ETag, "private, no-cache" and
+    // Vary: Accept-Encoding (compress.go). OkHttp asks for gzip and unzips the answer itself only while the app sets no
+    // Accept-Encoding of its own. With no HTTP cache it keeps no answer, so it never sends If-None-Match and is never
+    // answered 304 (#693). Giving the client a Cache would change that; its 304s would then need a test of their own.
+    @Test fun `the timetable is read from gzipped answers, which are never revalidated`() = runTest {
+        token = "jwt-abc"
+        repeat(2) {
+            server.enqueue(timetable("""{"routes":[{"id":"R1","short_name":"1","long_name":"Straight","color":"0077C0","text_color":"FFFFFF","type":3}]}"""))
+            server.enqueue(timetable(
+                """{"route_id":"R1","service_date":"20260902","timezone":"America/Los_Angeles","trips":[""" +
+                    """{"id":"T1","headsign":"North","direction_id":0,"starts_at":"2026-09-02T08:00:00-07:00",""" +
+                    """"ends_at":"2026-09-03T01:10:00-07:00","first_stop":"Stop ST1","last_stop":"Stop ST3"}]}""",
+            ))
+            server.enqueue(timetable(TripFixtures.tripJson()))
+        }
+
+        repeat(2) {
+            assertEquals("R1", api.routes().routes.single().id)
+            assertEquals("T1", api.routeTrips("R1").trips.single().id)
+            assertEquals(3, api.trip("T1").shape.points.size)
+        }
+
+        assertEquals(6, server.requestCount)
+        repeat(6) {
+            val sent = server.takeRequest()
+            assertEquals(sent.path, "gzip", sent.getHeader("Accept-Encoding"))
+            assertNull(sent.path, sent.getHeader("If-None-Match"))
+        }
+    }
+
+    /** A timetable answer as the server sends it since #692: gzipped, with an ETag the client may send back. */
+    private fun timetable(json: String) = MockResponse()
+        .setHeader("Content-Type", "application/json")
+        .setHeader("Content-Encoding", "gzip")
+        .setHeader("ETag", "W/\"590face42516f012\"")
+        .setHeader("Cache-Control", "private, no-cache")
+        .setHeader("Vary", "Accept-Encoding")
+        .setBody(Buffer().also { body -> GzipSink(body).buffer().use { it.writeUtf8(json) } })
 }
