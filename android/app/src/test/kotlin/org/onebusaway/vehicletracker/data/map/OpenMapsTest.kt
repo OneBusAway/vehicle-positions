@@ -34,7 +34,9 @@ class OpenMapsTest {
         val up = CountDownLatch(1)
         val map = thread { OpenMaps.opened(); up.countDown() }
         try {
-            assertFalse("not while the delete runs", up.await(300, TimeUnit.MILLISECONDS))
+            // Blocked on the lock the delete holds: before that, the map may not have tried to come up at all.
+            assertTrue("it waits on the delete", within(5_000) { map.state == Thread.State.BLOCKED })
+            assertEquals("not up while the delete runs", 1L, up.count)
             finish.countDown()
             assertTrue("once it is done", up.await(5, TimeUnit.SECONDS))
             assertFalse("and then no delete while it is up", OpenMaps.whileNoneOpen {})
@@ -44,5 +46,15 @@ class OpenMapsTest {
             map.join()
             OpenMaps.closed()
         }
+    }
+
+    /** Whether [condition] holds within [ms], checked every 10 ms. */
+    private fun within(ms: Long, condition: () -> Boolean): Boolean {
+        val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(ms)
+        while (System.nanoTime() < deadline) {
+            if (condition()) return true
+            Thread.sleep(10)
+        }
+        return condition()
     }
 }
