@@ -1583,6 +1583,38 @@ import VehiclePositionsKit
         #expect(!s.viewerSignedOut)
         #expect(try tokens.load()?.token == token)
     }
+
+    /// Leaving My trips mid-load cancels the load, and the request then
+    /// fails: only a load that failed on its own is logged as an error.
+    @Test func aMyTripsLoadCancelledByLeavingThePageIsNotLoggedAsAnError() async throws {
+        let s = session()
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+        let cancelled = UUID().uuidString
+        let failed = UUID().uuidString
+        api.myTripsAnswers = [.failure(Described(cancelled)), .failure(Described(failed))]
+
+        let left = Task { try await s.myTrips(limit: 50, offset: 0) }
+        left.cancel()
+        _ = await left.result
+        await #expect(throws: Described(failed)) { try await s.myTrips(limit: 50, offset: 0) }
+
+        // The log hands a line back a moment after it is written, and the
+        // cancelled load's would come before the failed one's.
+        var lines: [LoggedError] = []
+        for _ in 0..<30 {
+            lines = try #require(DiagnosticsFile.recentErrors(limit: .max))
+            if lines.contains(where: { $0.pieces.contains(.shown(failed)) }) { break }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        #expect(lines.contains { $0.pieces.contains(.shown(failed)) })
+        #expect(!lines.contains { $0.pieces.contains(.shown(cancelled)) })
+    }
+}
+
+/// An error that describes itself in the log as just its words.
+nonisolated struct Described: Error, Equatable, CustomStringConvertible {
+    let description: String
+    init(_ description: String) { self.description = description }
 }
 
 /// Keeps the token in memory and notes, at each save, the trip stored then.

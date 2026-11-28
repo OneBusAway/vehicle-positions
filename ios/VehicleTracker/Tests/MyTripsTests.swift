@@ -160,6 +160,30 @@ import Testing
         #expect(days.map { $0.trips.map(\.id) } == [[6, 5], [4], [3], [2]])
     }
 
+    /// The titles are worked out as the list shows, then again at each
+    /// midnight, so on a page left open Today becomes Yesterday.
+    @Test func theDaysAreTitledAgainAtEachMidnight() {
+        let times = Array(EachMidnight(calendar: Self.calendar).entries(from: Self.now, mode: .normal).prefix(3))
+
+        #expect(times == [Self.now, Self.date(2026, 11, 26, 0, 0), Self.date(2026, 11, 27, 0, 0)])
+        let titles = times.map { MyTripsDay.of([Self.trip(1)], now: $0, calendar: Self.calendar, locale: Self.english)[0].title }
+        #expect(titles == ["Today", "Yesterday", "Wednesday, November 25"])
+    }
+
+    /// On the days the clocks change too: Los Angeles's 2026-11-01 runs 25
+    /// hours, and Santiago's 2026-09-06 skips from 0:00 to 1:00, so it
+    /// starts at 1:00.
+    @Test func eachDayIsTitledAgainAtItsStart_whenTheClocksChange() throws {
+        let longDay = EachMidnight(calendar: Self.calendar).entries(from: Self.date(2026, 10, 31, 13, 0), mode: .normal)
+        #expect(Array(longDay.prefix(3)) == [Self.date(2026, 10, 31, 13, 0), Self.date(2026, 11, 1, 0, 0), Self.date(2026, 11, 2, 0, 0)])
+
+        var santiago = Calendar(identifier: .gregorian)
+        santiago.timeZone = try #require(TimeZone(identifier: "America/Santiago"))
+        let saturday = try #require(santiago.date(from: DateComponents(year: 2026, month: 9, day: 5, hour: 13)))
+        let shortDay = EachMidnight(calendar: santiago).entries(from: saturday, mode: .normal)
+        #expect(Array(shortDay.prefix(2)).last == santiago.date(from: DateComponents(year: 2026, month: 9, day: 6, hour: 1)))
+    }
+
     // MARK: Rows
 
     @Test func aRowHasTheRoutesBadge_whereTheTripWent_andWhenAndOnWhichVehicle() {
