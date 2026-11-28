@@ -66,6 +66,7 @@ import org.onebusaway.vehicletracker.ui.runs.RunsScreen
 import org.onebusaway.vehicletracker.ui.settings.ChangePasswordScreen
 import org.onebusaway.vehicletracker.ui.settings.LicenseScreen
 import org.onebusaway.vehicletracker.ui.settings.LicensesScreen
+import org.onebusaway.vehicletracker.ui.settings.MyTripsScreen
 import org.onebusaway.vehicletracker.ui.settings.OfflineMapScreen
 import org.onebusaway.vehicletracker.ui.settings.PermissionCheckScreen
 import org.onebusaway.vehicletracker.ui.settings.PrivacyScreen
@@ -112,6 +113,7 @@ internal const val ROUTE_OFFLINE_MAP = "offline_map"
 internal const val ROUTE_PRIVACY = "privacy"
 internal const val ROUTE_LICENSES = "licenses"
 internal const val ROUTE_LICENSE = "license/{index}"
+internal const val ROUTE_MY_TRIPS = "my_trips"
 internal const val ROUTE_CHANGE_PASSWORD = "change_password"
 
 /** Set on Settings' entry by Change password once the password changed, for Settings to say so. */
@@ -168,8 +170,8 @@ private fun AnimatedContentTransitionScope<NavBackStackEntry>.toOrFromTracking()
     initialState.destination.route == ROUTE_TRACKING || targetState.destination.route == ROUTE_TRACKING
 
 private val SETTINGS_ROUTES = setOf(
-    ROUTE_SETTINGS, ROUTE_PERMISSION_CHECK, ROUTE_TRIP_SETTINGS, ROUTE_OFFLINE_MAP, ROUTE_CHANGE_PASSWORD, ROUTE_HELP, ROUTE_PRIVACY, ROUTE_LICENSES,
-    ROUTE_LICENSE, ROUTE_WELCOME_AGAIN,
+    ROUTE_SETTINGS, ROUTE_PERMISSION_CHECK, ROUTE_TRIP_SETTINGS, ROUTE_OFFLINE_MAP, ROUTE_MY_TRIPS, ROUTE_CHANGE_PASSWORD,
+    ROUTE_HELP, ROUTE_PRIVACY, ROUTE_LICENSES, ROUTE_LICENSE, ROUTE_WELCOME_AGAIN,
 )
 
 /**
@@ -510,6 +512,7 @@ fun AppNav(modifier: Modifier = Modifier, navViewModel: AppNavViewModel = hiltVi
                 onPermissionCheck = dropUnlessResumed { navController.navigate(ROUTE_PERMISSION_CHECK) },
                 onTripSettings = dropUnlessResumed { navController.navigate(ROUTE_TRIP_SETTINGS) },
                 onOfflineMap = dropUnlessResumed { navController.navigate(ROUTE_OFFLINE_MAP) },
+                onMyTrips = dropUnlessResumed { navController.navigate(ROUTE_MY_TRIPS) },
                 onChangePassword = dropUnlessResumed { navController.navigate(ROUTE_CHANGE_PASSWORD) },
                 passwordChanged = passwordChanged,
                 onPasswordChangedShown = { entry.savedStateHandle[PASSWORD_CHANGED] = false },
@@ -528,6 +531,15 @@ fun AppNav(modifier: Modifier = Modifier, navViewModel: AppNavViewModel = hiltVi
         composable(ROUTE_TRIP_SETTINGS) {
             ClearOfSystemBars {
                 TripSettingsScreen(onBack = dropUnlessResumed { navController.popBackStack() })
+            }
+        }
+        composable(ROUTE_MY_TRIPS) {
+            ClearOfSystemBars {
+                MyTripsScreen(
+                    onBack = dropUnlessResumed { navController.popBackStack() },
+                    // Not a tap: it fires once the server has turned the session away.
+                    onSessionEnded = { navController.navigate(ROUTE_LOGIN, toSignIn) },
+                )
             }
         }
         composable(ROUTE_CHANGE_PASSWORD) {

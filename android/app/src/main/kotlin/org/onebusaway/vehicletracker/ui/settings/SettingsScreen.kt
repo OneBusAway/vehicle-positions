@@ -97,6 +97,7 @@ fun SettingsScreen(
     onPermissionCheck: () -> Unit,
     onTripSettings: () -> Unit,
     onOfflineMap: () -> Unit,
+    onMyTrips: () -> Unit,
     onChangePassword: () -> Unit,
     onHelp: () -> Unit,
     onPrivacy: () -> Unit,
@@ -143,6 +144,7 @@ fun SettingsScreen(
             onPermissionCheck = onPermissionCheck,
             onTripSettings = onTripSettings,
             onOfflineMap = onOfflineMap,
+            onMyTrips = onMyTrips,
             onChangePassword = onChangePassword,
             passwordChanged = passwordChanged,
             onPasswordChangedShown = onPasswordChangedShown,
@@ -193,6 +195,7 @@ internal fun SettingsContent(
     onPermissionCheck: () -> Unit,
     onTripSettings: () -> Unit,
     onOfflineMap: () -> Unit,
+    onMyTrips: () -> Unit,
     onChangePassword: () -> Unit,
     onSignOut: () -> Unit,
     onSignedOut: () -> Unit,
@@ -262,7 +265,8 @@ internal fun SettingsContent(
                 }
                 ThemeRow(theme, GroupPlace.LAST, onChooseTheme)
                 GroupTitle(R.string.settings_group_account)
-                SettingsRow(R.drawable.ic_key, stringResource(R.string.change_password_title), null, GroupPlace.ONLY, opens = true, onClick = onChangePassword)
+                SettingsRow(R.drawable.ic_history, stringResource(R.string.my_trips_title), null, GroupPlace.FIRST, opens = true, onClick = onMyTrips)
+                SettingsRow(R.drawable.ic_key, stringResource(R.string.change_password_title), null, GroupPlace.LAST, opens = true, onClick = onChangePassword)
                 GroupTitle(R.string.help_section_about)
                 SettingsRow(R.drawable.ic_help, stringResource(R.string.help_title), null, GroupPlace.FIRST, opens = true, onClick = onHelp)
                 SettingsRow(R.drawable.ic_share, stringResource(R.string.help_share), stringResource(R.string.help_share_detail), GroupPlace.MIDDLE, onClick = onShare)

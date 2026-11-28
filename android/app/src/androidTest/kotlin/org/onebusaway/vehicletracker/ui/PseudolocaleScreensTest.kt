@@ -27,6 +27,9 @@ import org.junit.runner.RunWith
 import org.junit.runners.Parameterized
 import org.onebusaway.vehicletracker.R
 import org.onebusaway.vehicletracker.data.ActiveTrip
+import org.onebusaway.vehicletracker.data.MyTrip
+import org.onebusaway.vehicletracker.data.MyTripRoute
+import org.onebusaway.vehicletracker.data.MyTripsPage
 import org.onebusaway.vehicletracker.data.PasswordChangeFailure
 import org.onebusaway.vehicletracker.data.ScreenOn
 import org.onebusaway.vehicletracker.data.ThemeChoice
@@ -69,6 +72,8 @@ import org.onebusaway.vehicletracker.ui.runs.RunsUiState
 import org.onebusaway.vehicletracker.ui.runs.TripRun
 import org.onebusaway.vehicletracker.ui.runs.runBoardTipText
 import org.onebusaway.vehicletracker.ui.settings.ChangePasswordContent
+import org.onebusaway.vehicletracker.ui.settings.MyTripsContent
+import org.onebusaway.vehicletracker.ui.settings.MyTripsList
 import org.onebusaway.vehicletracker.ui.settings.NewPasswordProblem
 import org.onebusaway.vehicletracker.ui.settings.OfflineMap
 import org.onebusaway.vehicletracker.ui.settings.OfflineMapContent
@@ -279,7 +284,7 @@ class PseudolocaleScreensTest(private val tag: String) {
             theme = ThemeChoice.SYSTEM,
             screenOn = ScreenOn.CHARGING,
             offlineMap = OfflineMap.Ready(MapDetails(48_000_000, 1_789_000_000_000L, 1_790_000_000L)),
-            onBack = {}, onFix = {}, onPermissionCheck = {}, onTripSettings = {}, onOfflineMap = {}, onChangePassword = {}, onSignOut = {}, onSignedOut = {}, onChooseTheme = {}, onHelp = {}, onPrivacy = {}, onLicenses = {}, onShare = {},
+            onBack = {}, onFix = {}, onPermissionCheck = {}, onTripSettings = {}, onOfflineMap = {}, onMyTrips = {}, onChangePassword = {}, onSignOut = {}, onSignedOut = {}, onChooseTheme = {}, onHelp = {}, onPrivacy = {}, onLicenses = {}, onShare = {},
         )
     }
 
@@ -312,6 +317,13 @@ class PseudolocaleScreensTest(private val tag: String) {
     @Test
     fun locationNotice() = check("location-notice", R.string.location_notice_title) {
         LocationNoticeContent(server = "metro.example", onAgree = {}, onNotNow = {})
+    }
+
+    @Test
+    fun myTrips() = check("my-trips", R.string.my_trips_title) {
+        val start = java.time.ZonedDateTime.now().minusHours(3).toInstant()
+        val trip = MyTrip(1, "4317", "R1", MyTripRoute("7", "Rainier Beach", "FDB71A", "000000"), "Downtown Seattle", start, start.plusSeconds(2940))
+        MyTripsContent(MyTripsList().receivedFirst(MyTripsPage(false, listOf(trip))).firstFailed(), false, java.time.LocalDate.now(), {}, {}, {}, {}, {})
     }
 
     @Test
