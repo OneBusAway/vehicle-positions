@@ -706,7 +706,7 @@ class SettingsScreenTest {
         compose.setContent { Content() }
         compose.onNode(hasText(string(R.string.settings_theme)) and hasClickAction()).performScrollTo().performClick()
 
-        compose.onNode(hasText(string(R.string.language_list_cancel)) and hasAnyAncestor(isDialog())).performClick()
+        compose.onNode(hasText(string(R.string.theme_list_cancel)) and hasAnyAncestor(isDialog())).performClick()
 
         assertEquals(emptyList<ThemeChoice>(), calls.themes)
         compose.onNode(isDialog()).assertDoesNotExist()

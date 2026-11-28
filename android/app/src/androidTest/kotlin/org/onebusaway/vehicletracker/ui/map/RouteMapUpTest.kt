@@ -12,11 +12,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.maplibre.android.location.modes.CameraMode
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
 import org.onebusaway.vehicletracker.data.MapUp
@@ -31,10 +33,14 @@ import org.onebusaway.vehicletracker.ui.theme.AppTheme
 import java.time.Instant
 import java.time.ZoneOffset
 import kotlin.math.abs
+import kotlin.math.min
 
 private const val TIMEOUT_MS = 30_000L
 
-/** What is up on the Tracking map as it follows a vehicle that goes east: east, or north when the driver chose that. */
+/**
+ * What is up on the Tracking map as it follows a vehicle that goes east: east, or north when the driver chose that, from
+ * the first fix even when the choice is read after it.
+ */
 @RunWith(AndroidJUnit4::class)
 class RouteMapUpTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
@@ -58,7 +64,7 @@ class RouteMapUpTest {
         previous = null,
     )
 
-    private var up by mutableStateOf(MapUp.HEADING)
+    private var up by mutableStateOf<MapUp?>(MapUp.HEADING)
 
     private fun mapsIn(view: View): List<MapView> = when (view) {
         is MapView -> listOf(view)
@@ -66,7 +72,7 @@ class RouteMapUpTest {
         else -> emptyList()
     }
 
-    private fun show(first: MapUp): MapLibreMap {
+    private fun show(first: MapUp?): MapLibreMap {
         assumeTrue("the map needs OpenGL ES 3", supportsMap(compose.activity.glEsVersion()))
         up = first
         compose.setContent {
@@ -112,4 +118,29 @@ class RouteMapUpTest {
         compose.waitForIdle()
         assertTrue(abs(compose.runOnUiThread<Double> { map.cameraPosition.bearing }) < 2)
     }
+
+    @Test
+    fun withNorthChosen_butReadAfterTheFirstFix_northIsUpFromTheStart() {
+        val map = show(null)
+        var farthestFromNorth = 0.0
+        compose.runOnUiThread {
+            map.addOnCameraMoveListener { farthestFromNorth = maxOf(farthestFromNorth, offNorth(map.cameraPosition.bearing)) }
+        }
+        // The vehicle goes on the map with its style, and the fix the map was given waits for the choice.
+        compose.waitUntil(TIMEOUT_MS) { map.locationComponentFollows }
+        compose.runOnUiThread { assertNull("the vehicle waits for the choice", map.locationComponent.lastKnownLocation) }
+
+        up = MapUp.NORTH
+
+        compose.waitUntil(TIMEOUT_MS) {
+            compose.runOnUiThread<Boolean> {
+                map.locationComponent.lastKnownLocation != null && map.locationComponent.cameraMode == CameraMode.TRACKING_GPS_NORTH
+            }
+        }
+        map.awaitUp(0.0)
+        compose.waitForIdle()
+        assertTrue("north stayed up, but the map turned $farthestFromNorth degrees", farthestFromNorth < 2)
+    }
+
+    private fun offNorth(bearing: Double): Double = min(bearing, 360 - bearing)
 }

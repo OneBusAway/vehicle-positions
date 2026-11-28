@@ -233,6 +233,8 @@
     <string name="theme_system_detail">Same as the phone</string>
     <string name="theme_light">Light</string>
     <string name="theme_dark">Dark</string>
+    <!-- Closes the list of themes without changing the theme. -->
+    <string name="theme_list_cancel">Cancel</string>
     <!-- The location notice: a full page before Android first asks for location, which Google Play requires. It must say that the app collects location data, what for, and that it does so even when the app is closed or not in use. -->
     <string name="location_notice_title">Your location during a trip</string>
     <!-- The notice's main sentence. The app's name, e.g. "Vehicle Tracker collects location data to show your vehicle to riders during a trip, even when the app is closed or not in use." Keep "even when the app is closed or not in use": Google Play requires those words. -->

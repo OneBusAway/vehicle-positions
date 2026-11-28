@@ -1,13 +1,15 @@
 package org.onebusaway.vehicletracker.ui
 
+import androidx.lifecycle.SavedStateHandle
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.onebusaway.vehicletracker.ui.permissions.Fix
+import org.onebusaway.vehicletracker.ui.permissions.PermissionAnswers
 import org.onebusaway.vehicletracker.ui.permissions.PermissionRow
 import org.onebusaway.vehicletracker.ui.permissions.afterAsking
 import org.onebusaway.vehicletracker.ui.permissions.fixOf
 
-/** What a tap on a row of Permission check does, and how an answer from Android changes it. */
+/** What a tap on a row of Permission check does, how an answer from Android changes it, and where that is kept. */
 class PermissionFixesTest {
     private val none = emptySet<PermissionRow>()
 
@@ -40,5 +42,29 @@ class PermissionFixesTest {
     @Test
     fun `an allowed row can be asked about again should it be taken away`() {
         assertEquals(none, setOf(PermissionRow.LOCATION).afterAsking(PermissionRow.LOCATION, allowed = true, rationale = false))
+    }
+
+    @Test
+    fun `nothing is only in the settings until Android has answered`() {
+        assertEquals(none, PermissionAnswers(SavedStateHandle()).onlyInSettings.value)
+    }
+
+    @Test
+    fun `a refusal for good is kept in the activity's saved state, for the answers read back from it`() {
+        val saved = SavedStateHandle()
+        PermissionAnswers(saved).answered(PermissionRow.LOCATION, allowed = false, rationale = false)
+
+        assertEquals(setOf(PermissionRow.LOCATION), PermissionAnswers(saved).onlyInSettings.value)
+    }
+
+    @Test
+    fun `each answer changes its own row`() {
+        val answers = PermissionAnswers(SavedStateHandle())
+        answers.answered(PermissionRow.LOCATION, allowed = false, rationale = false)
+        answers.answered(PermissionRow.NOTIFICATIONS, allowed = false, rationale = false)
+
+        answers.answered(PermissionRow.LOCATION, allowed = true, rationale = false)
+
+        assertEquals(setOf(PermissionRow.NOTIFICATIONS), answers.onlyInSettings.value)
     }
 }
