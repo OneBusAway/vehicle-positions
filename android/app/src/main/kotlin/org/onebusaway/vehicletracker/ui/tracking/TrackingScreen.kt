@@ -126,7 +126,7 @@ fun TrackingScreen(
                 val geometry = state.tracking.geometry
                 if (mapSupported && geometry != null) {
                     val ring = AppTheme.statusColors[vehicleTone(state.tracking.adherence, state.tracking.problem)].text
-                    RouteMap(geometry, state.tracking.adherence, state.mapFile, ring.toArgb(), chosen.mapUp, contentPadding, controlsPadding, modifier)
+                    RouteMap(geometry, state.tracking.adherence, state.mapFile, ring.toArgb(), tripSettings?.mapUp, contentPadding, controlsPadding, modifier)
                 } else {
                     Spacer(modifier)
                 }

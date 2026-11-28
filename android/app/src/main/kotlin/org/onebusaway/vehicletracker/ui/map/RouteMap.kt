@@ -163,10 +163,12 @@ fun Context.glEsVersion(): Int = getSystemService(ActivityManager::class.java).d
  * enlarged and named, and the vehicle pointed along its course and ringed in [vehicleRing], ARGB,
  * the status colour of how it is keeping to the schedule. Off the route, a dotted line joins it to
  * where it was matched. The camera follows with [up] at the top: heading-up the vehicle is a third
- * of the way up the part of the map that [contentPadding], the screen's own cards and bars over
- * it, leaves uncovered, and north-up in the middle of it. Under it is the agency's street map once
- * the file is on the phone, and a plain background until then, with a note while the first copy
- * downloads. The note and Re-center sit at the bottom left, inside [controlsPadding].
+ * of the way up the part of the map that [contentPadding], the screen's own cards and bars over it,
+ * leaves uncovered, and north-up in the middle of it. Until [up] is known the whole route shows and
+ * the vehicle waits for it, so the camera never starts one way up and turns to the other. Under the
+ * trip is the agency's street map once the file is on the phone, and a plain background until then,
+ * with a note while the first copy downloads. The note and Re-center sit at the bottom left, inside
+ * [controlsPadding].
  */
 @Composable
 fun RouteMap(
@@ -174,7 +176,7 @@ fun RouteMap(
     adherence: Adherence?,
     mapFile: MapFileState,
     vehicleRing: Int,
-    up: MapUp,
+    up: MapUp?,
     contentPadding: PaddingValues,
     controlsPadding: PaddingValues,
     modifier: Modifier = Modifier,
@@ -194,7 +196,7 @@ private fun ThemedRouteMap(
     adherence: Adherence?,
     mapFile: MapFileState,
     vehicleRing: Int,
-    up: MapUp,
+    up: MapUp?,
     contentPadding: PaddingValues,
     controlsPadding: PaddingValues,
     modifier: Modifier,
@@ -351,7 +353,8 @@ private class RouteMapController(
     private val density = context.resources.displayMetrics.density
     private var map: MapLibreMap? = null
 
-    private var up = MapUp.HEADING
+    /** Null until the driver's choice is read. */
+    private var up: MapUp? = null
 
     /** Pixels at the map's top and bottom edges that the screen draws over, so the trip is kept out of them. */
     private var coveredTop = 0
@@ -494,11 +497,15 @@ private class RouteMapController(
         startFollowing(map, zoom = null)
     }
 
-    /** Turns the map to have [up] at the top, when it was on screen already as the driver's choice was read. */
-    fun orient(up: MapUp) {
-        if (up == this.up) return
+    /**
+     * Turns the map to have [up] at the top. The first [up] draws the fix that waited for it, which then starts the
+     * camera following that way up.
+     */
+    fun orient(up: MapUp?) {
+        if (up == null || up == this.up) return
+        val waited = this.up == null
         this.up = up
-        if (following) follow()
+        if (waited) render() else if (following) follow()
     }
 
     /**
@@ -508,6 +515,7 @@ private class RouteMapController(
      * it while the camera is on its way.
      */
     private fun startFollowing(map: MapLibreMap, zoom: Double?) {
+        val up = up ?: return
         val component = map.locationComponent
         component.setCameraMode(
             if (up == MapUp.NORTH) CameraMode.TRACKING_GPS_NORTH else CameraMode.TRACKING_GPS,
@@ -526,6 +534,7 @@ private class RouteMapController(
 
     private fun applyFollowPadding(animationMs: Long = FOLLOW_ANIMATION_MS) {
         val map = map ?: return
+        val up = up ?: return
         if (destroyed) return
         map.locationComponent.paddingWhileTracking(followPadding(mapView.height, coveredTop, coveredBottom, up), animationMs)
     }
@@ -564,10 +573,12 @@ private class RouteMapController(
         // fix moves anything.
         val adherence = latestAdherence ?: return
         if (adherence == drawnAdherence) return
+        // The fix waits for the driver's choice, which decides how the camera follows it.
+        val up = up ?: return
         drawnAdherence = adherence
         val shape = shape ?: return
         val next = routeMapState(geometry, shape, adherence, heading)
-        drawFix(map, style, geometry, previous = state, next = next)
+        drawFix(map, style, geometry, up, previous = state, next = next)
         state = next
     }
 
@@ -742,7 +753,14 @@ private class RouteMapController(
         map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, fit, coveredTop + fit, fit, coveredBottom + fit))
     }
 
-    private fun drawFix(map: MapLibreMap, style: Style, geometry: TripGeometry, previous: RouteMapState?, next: RouteMapState) {
+    private fun drawFix(
+        map: MapLibreMap,
+        style: Style,
+        geometry: TripGeometry,
+        up: MapUp,
+        previous: RouteMapState?,
+        next: RouteMapState,
+    ) {
         val component = map.locationComponent
         component.forceLocationUpdate(
             Location(LOCATION_PROVIDER).apply {
